@@ -67,6 +67,7 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 // Singleton: the ONNX session and its model are expensive to construct and safe to share.
 builder.Services.AddSingleton<IEmbedder, LocalTextEmbedder>();
 builder.Services.AddScoped<VectorSearch>();
+builder.Services.AddScoped<BudgetQueries>();
 builder.Services.AddScoped<TransactionCategorizer>();
 builder.Services.AddScoped<DatabaseSeeder>();
 

@@ -1,0 +1,153 @@
+@page "/transactions"
+@using System.Security.Claims
+@using BudgetAssistant.Core.Entities
+@using BudgetAssistant.Web.Data
+@using BudgetAssistant.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize]
+@inject BudgetQueries Queries
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider Auth
+
+<PageTitle>Transactions</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Transactions</h1>
+        <p>Each category was inferred from the merchant text. Hover a match to see what it matched.</p>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-head">
+        <div class="toolbar">
+            <input class="control" placeholder="Search merchant…" value="@search"
+                   @onchange="OnSearch" style="min-width:220px" />
+            <label style="display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--muted)">
+                <input type="checkbox" checked="@onlyFlagged" @onchange="OnFlaggedToggle" />
+                Only flagged
+            </label>
+        </div>
+        <span class="eyebrow">@rows.Count shown</span>
+    </div>
+
+    <div class="table-scroll">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Confidence</th>
+                    <th>Flags</th>
+                    <th style="text-align:right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Count == 0)
+                {
+                    <tr><td colspan="6"><div class="empty">Nothing matches that filter.</div></td></tr>
+                }
+                @foreach (var t in rows)
+                {
+                    <tr>
+                        <td class="date">@t.Date.ToString("MMM d")</td>
+                        <td class="desc">@t.Description</td>
+                        <td>
+                            <select class="control" style="padding:4px 8px;font-size:12.5px"
+                                    value="@(t.Category ?? "")"
+                                    @onchange="e => RecategorizeAsync(t.Id, e)">
+                                <option value="">— uncategorized —</option>
+                                @foreach (var c in categories)
+                                {
+                                    <option value="@c.Name">@c.Name</option>
+                                }
+                            </select>
+                        </td>
+                        <td>
+                            @if (t.CategorySource == nameof(CategorySource.Manual))
+                            {
+                                <span class="chip">set by you</span>
+                            }
+                            else if (t.Confidence is { } conf)
+                            {
+                                <span class="conf" title="@($"Nearest labelled merchant: {t.MatchedOn}")">
+                                    <span class="conf-track @(conf < 0.7f ? "low" : "")">
+                                        <span style="width:@((int)(conf * 100))%"></span>
+                                    </span>
+                                    <span class="conf-val">@conf.ToString("P0")</span>
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="conf-val">—</span>
+                            }
+                        </td>
+                        <td>
+                            @if (t.IsDuplicate)
+                            {
+                                <span class="badge-flag">possible duplicate</span>
+                            }
+                            @if (t.IsSubscription)
+                            {
+                                <span class="badge-flag badge-sub">recurring</span>
+                            }
+                        </td>
+                        <td class="amt @(t.Amount > 0 ? "pos" : "")">@t.Amount.ToString("C2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "flagged")] public bool? FlaggedParam { get; set; }
+
+    List<TransactionDto> rows = [];
+    List<Category> categories = [];
+    string? search;
+    bool onlyFlagged;
+    string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        categories = await Db.Categories.OrderBy(c => c.Name).ToListAsync();
+        onlyFlagged = FlaggedParam ?? false;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync() =>
+        rows = await Queries.TransactionsAsync(userId, take: 200, search: search, onlyFlagged: onlyFlagged);
+
+    async Task OnSearch(ChangeEventArgs e)
+    {
+        search = e.Value?.ToString();
+        await LoadAsync();
+    }
+
+    async Task OnFlaggedToggle(ChangeEventArgs e)
+    {
+        onlyFlagged = e.Value is true;
+        await LoadAsync();
+    }
+
+    /// <summary>A manual correction is stored as CategorySource.Manual, which makes it a
+    /// labelled neighbour for future classifications — corrections teach the classifier.</summary>
+    async Task RecategorizeAsync(int id, ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        var txn = await Db.Transactions.FirstOrDefaultAsync(t => t.Id == id && t.Account!.UserId == userId);
+        if (txn is null) return;
+
+        txn.CategoryId = categories.FirstOrDefault(c => c.Name == name)?.Id;
+        txn.CategorySource = txn.CategoryId is null ? CategorySource.Uncategorized : CategorySource.Manual;
+        txn.CategoryConfidence = null;
+        txn.CategoryMatchedOn = null;
+        await Db.SaveChangesAsync();
+        await LoadAsync();
+    }
+}

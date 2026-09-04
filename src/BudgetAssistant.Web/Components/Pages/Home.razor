@@ -1,7 +1,166 @@
-﻿@page "/"
+@page "/"
+@using System.Security.Claims
+@using BudgetAssistant.Core.Analysis
+@using BudgetAssistant.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject BudgetQueries Queries
+@inject AuthenticationStateProvider Auth
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="page-head">
+    <div>
+        <h1>Dashboard</h1>
+        <p>Spending for @month.ToString("MMMM yyyy"), categorized automatically.</p>
+    </div>
+    @if (months.Count > 0)
+    {
+        <select class="control" @onchange="OnMonthChanged" value="@month.ToString("yyyy-MM")">
+            @foreach (var m in months)
+            {
+                <option value="@m.ToString("yyyy-MM")">@m.ToString("MMMM yyyy")</option>
+            }
+        </select>
+    }
+</div>
 
-Welcome to your new app.
+@if (summary is null)
+{
+    <div class="panel"><div class="empty">Loading…</div></div>
+}
+else
+{
+    <div class="kpis">
+        <div class="kpi">
+            <span class="label">Income</span>
+            <span class="value pos">@Money(summary.Value.Income)</span>
+            <span class="sub">@month.ToString("MMM yyyy")</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Spending</span>
+            <span class="value">@Money(summary.Value.Spending)</span>
+            <span class="sub">across @summary.Value.ByCategory.Count categories</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Net</span>
+            <span class="value @(summary.Value.Net >= 0 ? "pos" : "")">@Money(summary.Value.Net)</span>
+            <span class="sub">@(summary.Value.Net >= 0 ? "saved this month" : "overspent this month")</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Recurring</span>
+            <span class="value">@Money(summary.Value.SubscriptionSpend)</span>
+            <span class="sub">detected subscriptions</span>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div class="panel">
+            <div class="panel-head">
+                <h2>Where the money went</h2>
+                <span class="eyebrow">vs. previous month</span>
+            </div>
+            <div class="panel-body">
+                @if (summary.Value.ByCategory.Count == 0)
+                {
+                    <div class="empty">No categorized spending this month.</div>
+                }
+                else
+                {
+                    var max = summary.Value.ByCategory.Max(c => c.Amount);
+                    @foreach (var cat in summary.Value.ByCategory)
+                    {
+                        <div class="cat-row">
+                            <span class="cat-name">
+                                <span class="dot" style="background:@cat.Color"></span>@cat.Category
+                            </span>
+                            <span class="cat-amt">
+                                @Money(cat.Amount)
+                                <span class="delta @DeltaClass(cat)">@DeltaText(cat)</span>
+                            </span>
+                            <span class="bar">
+                                <span style="width:@(Pct(cat.Amount, max))%;background:@cat.Color"></span>
+                            </span>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head"><h2>Needs attention</h2></div>
+            <div class="panel-body">
+                <div class="cat-row">
+                    <span class="cat-name">Possible double charges</span>
+                    <span class="cat-amt">@summary.Value.DuplicateCount</span>
+                </div>
+                @if (summary.Value.DuplicateCount > 0)
+                {
+                    <p style="font-size:13px;color:var(--muted);margin:10px 0 16px">
+                        @summary.Value.DuplicateAmount.ToString("C2") charged twice by the same merchant,
+                        for the same amount, within three days.
+                    </p>
+                }
+                <div class="cat-row">
+                    <span class="cat-name">Uncategorized</span>
+                    <span class="cat-amt">@uncategorized</span>
+                </div>
+                <p style="font-size:13px;color:var(--muted);margin:10px 0 0">
+                    Nothing close enough in the merchant history to classify confidently.
+                    Left blank rather than guessed.
+                </p>
+                <div style="margin-top:16px">
+                    <a class="btn" href="transactions?flagged=true">Review flagged →</a>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    MonthlySummary? summary;
+    List<DateOnly> months = [];
+    DateOnly month = DateOnly.FromDateTime(DateTime.UtcNow);
+    int uncategorized;
+    string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        months = await Queries.AvailableMonthsAsync(userId);
+        if (months.Count > 0) month = months[0];
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        summary = await Queries.SummaryAsync(userId, month);
+        uncategorized = (await Queries.TransactionsAsync(userId, take: 500, onlyFlagged: true))
+            .Count(t => t.Category is null);
+    }
+
+    async Task OnMonthChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse($"{e.Value}-01", out var picked))
+        {
+            month = picked;
+            summary = null;
+            await LoadAsync();
+        }
+    }
+
+    static string Money(decimal d) => d.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    static int Pct(decimal part, decimal whole) => whole == 0 ? 0 : (int)Math.Round(part / whole * 100);
+
+    static string DeltaClass(CategoryTotal c) =>
+        c.Delta > 0 ? "up" : c.Delta < 0 ? "down" : "flat";
+
+    static string DeltaText(CategoryTotal c) => c.DeltaFraction switch
+    {
+        null when c.Amount > 0 => "new",
+        null => "",
+        var f when Math.Abs(f.Value) < 0.01m => "flat",
+        var f => (f > 0 ? "+" : "") + f.Value.ToString("P0"),
+    };
+}
