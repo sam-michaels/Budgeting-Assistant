@@ -61,6 +61,9 @@ public class Transaction
     public CategorySource CategorySource { get; set; } = CategorySource.Uncategorized;
     /// <summary>Share of the weighted k-NN vote won by the chosen category, 0..1.</summary>
     public float? CategoryConfidence { get; set; }
+    /// <summary>The nearest labelled example behind the suggestion, shown in the UI so the
+    /// classification is inspectable rather than a black box.</summary>
+    public string? CategoryMatchedOn { get; set; }
 
     public int? DuplicateOfId { get; set; }
     public bool IsSubscription { get; set; }

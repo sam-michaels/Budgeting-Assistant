@@ -19,18 +19,34 @@ public class KnnCategorizerTests
     }
 
     [Fact]
-    public void OneStrongMatchOutvotesTwoWeakOnes()
+    public void OneStrongMatchOutvotesSeveralMarginalOnes()
     {
-        // Weighted by similarity, not a raw count: 0.86 beats 0.56 + 0.57 on quality...
-        // but two weak matches sum higher, so the count still matters. This asserts the
-        // documented behaviour rather than an intuition about it.
+        // Barely-clearing neighbours must not win on volume.
         var s = KnnCategorizer.Suggest([
             new(Coffee,    "BLUE BOTTLE", 0.86f),
             new(Groceries, "SAFEWAY",     0.56f),
             new(Groceries, "KROGER",      0.57f),
         ]);
-        Assert.Equal(Groceries, s!.Value.CategoryId);   // 1.13 > 0.86
-        Assert.InRange(s.Value.Confidence, 0.56f, 0.58f);
+        Assert.Equal(Coffee, s!.Value.CategoryId);
+    }
+
+    [Fact]
+    public void ExactMatchBeatsACrowdedNeighbouringCategory()
+    {
+        // The real failure this rule exists for: "GEICO AUTO PMT" is a verbatim Insurance
+        // example, but five Housing examples containing "PMT" summed higher under plain
+        // similarity weighting and stole the category.
+        const int Insurance = 4, Housing = 5;
+        var s = KnnCategorizer.Suggest([
+            new(Insurance, "GEICO AUTO PMT",    1.00f),
+            new(Housing,   "MORTGAGE PMT WELLS",0.66f),
+            new(Housing,   "GREYSTAR RENT PMT", 0.65f),
+            new(Housing,   "ZILLOW RENTAL PMT", 0.64f),
+            new(Housing,   "HOA MONTHLY DUES",  0.63f),
+            new(Housing,   "PROPERTY MGMT LLC", 0.62f),
+        ], k: 6);
+        Assert.Equal(Insurance, s!.Value.CategoryId);
+        Assert.Equal("GEICO AUTO PMT", s.Value.MatchedOn);
     }
 
     [Fact]
@@ -55,23 +71,38 @@ public class KnnCategorizerTests
     }
 
     [Fact]
-    public void ConfidenceIsUnanimousWhenAllNeighborsAgree()
+    public void UnanimousButDistantNeighborsDoNotYieldHighConfidence()
+    {
+        // Every neighbour agrees, so consensus is total — but the closest labelled example
+        // is still 0.72 away, and confidence must say so. This is the ZUNI CAFE case: all
+        // Coffee neighbours agreed on a restaurant.
+        var s = KnnCategorizer.Suggest([
+            new(Coffee, "PHILZ COFFEE", 0.72f),
+            new(Coffee, "STARBUCKS",    0.70f),
+        ]);
+        Assert.Equal(Coffee, s!.Value.CategoryId);
+        Assert.Equal(0.72f, s.Value.Confidence, 2);   // consensus 1.0, scaled by best match
+    }
+
+    [Fact]
+    public void ConfidenceApproachesCertaintyOnlyForNearExactMatches()
     {
         var s = KnnCategorizer.Suggest([
-            new(Coffee, "BLUE BOTTLE", 0.86f),
-            new(Coffee, "STARBUCKS",   0.72f),
+            new(Coffee, "BLUE BOTTLE COFFEE", 1.00f),
+            new(Coffee, "STARBUCKS",          0.72f),
         ]);
-        Assert.Equal(1.0f, s!.Value.Confidence, 3);
+        Assert.Equal(1.0f, s!.Value.Confidence, 2);
     }
 
     [Fact]
     public void RespectsK()
     {
-        // k=1 keeps only the single best neighbour, flipping the winner.
+        // k=1 keeps only the single best neighbour, flipping the winner. Both Groceries
+        // matches are strong here, so together they legitimately outweigh one better match.
         var neighbors = new Neighbor[] {
-            new(Coffee,    "BLUE BOTTLE", 0.86f),
-            new(Groceries, "SAFEWAY",     0.60f),
-            new(Groceries, "KROGER",      0.59f),
+            new(Coffee,    "BLUE BOTTLE", 0.90f),
+            new(Groceries, "SAFEWAY",     0.85f),
+            new(Groceries, "KROGER",      0.84f),
         };
         Assert.Equal(Groceries, KnnCategorizer.Suggest(neighbors)!.Value.CategoryId);
         Assert.Equal(Coffee,    KnnCategorizer.Suggest(neighbors, k: 1)!.Value.CategoryId);

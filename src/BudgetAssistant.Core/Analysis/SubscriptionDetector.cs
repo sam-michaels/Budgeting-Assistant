@@ -21,7 +21,10 @@ public static class SubscriptionDetector
         IReadOnlyList<(TxnVector Txn, string Label)> txns,
         float minSimilarity = SimilarityBands.SameMerchant)
     {
-        var unassigned = txns.OrderBy(t => t.Txn.Date).ToList();
+        // Outflows only. A recurring credit — payroll, a standing transfer into savings —
+        // is regular and same-amount, so it matches every structural test here, but money
+        // arriving is not a subscription.
+        var unassigned = txns.Where(t => t.Txn.Amount < 0).OrderBy(t => t.Txn.Date).ToList();
         var found = new List<Subscription>();
         var used = new HashSet<int>();
 

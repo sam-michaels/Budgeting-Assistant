@@ -1,6 +1,9 @@
 using BudgetAssistant.Web.Components;
 using BudgetAssistant.Web.Components.Account;
+using BudgetAssistant.Core.Abstractions;
 using BudgetAssistant.Web.Data;
+using BudgetAssistant.Web.Data.Seed;
+using BudgetAssistant.Web.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -61,7 +64,20 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
+// Singleton: the ONNX session and its model are expensive to construct and safe to share.
+builder.Services.AddSingleton<IEmbedder, LocalTextEmbedder>();
+builder.Services.AddScoped<VectorSearch>();
+builder.Services.AddScoped<TransactionCategorizer>();
+builder.Services.AddScoped<DatabaseSeeder>();
+
 var app = builder.Build();
+
+// Seeding is idempotent and only fills an empty database. Migrations are deliberately NOT
+// applied here — they run as an explicit, reviewable release step.
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    await scope.ServiceProvider.GetRequiredService<DatabaseSeeder>().SeedAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {

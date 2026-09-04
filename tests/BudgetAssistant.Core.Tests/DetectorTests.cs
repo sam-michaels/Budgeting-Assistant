@@ -80,12 +80,12 @@ public class DetectorTests
         // The whole point of clustering on vectors: these are the same subscription with
         // different reference strings, which exact string grouping would never join.
         var subs = SubscriptionDetector.Find([
-            (new(1, 15.99m, D(2026, 1, 5),  Netflix),  "NETFLIX COM"),
-            (new(2, 15.99m, D(2026, 2, 4),  Netflix2), "NETFLIX COM"),
-            (new(3, 15.99m, D(2026, 3, 6),  Netflix),  "NETFLIX COM"),
+            (new(1, -15.99m, D(2026, 1, 5),  Netflix),  "NETFLIX COM"),
+            (new(2, -15.99m, D(2026, 2, 4),  Netflix2), "NETFLIX COM"),
+            (new(3, -15.99m, D(2026, 3, 6),  Netflix),  "NETFLIX COM"),
         ]);
         var sub = Assert.Single(subs);
-        Assert.Equal(15.99m, sub.Amount);
+        Assert.Equal(-15.99m, sub.Amount);
         Assert.Equal([1, 2, 3], sub.TransactionIds);
         Assert.InRange(sub.MedianGapDays, 26, 35);
     }
@@ -94,8 +94,8 @@ public class DetectorTests
     public void DoesNotCallTwoChargesASubscription()
     {
         var subs = SubscriptionDetector.Find([
-            (new(1, 15.99m, D(2026, 1, 5), Netflix), "NETFLIX COM"),
-            (new(2, 15.99m, D(2026, 2, 4), Netflix), "NETFLIX COM"),
+            (new(1, -15.99m, D(2026, 1, 5), Netflix), "NETFLIX COM"),
+            (new(2, -15.99m, D(2026, 2, 4), Netflix), "NETFLIX COM"),
         ]);
         Assert.Empty(subs);
     }
@@ -105,9 +105,22 @@ public class DetectorTests
     {
         // Same merchant, same amount, but weekly — a habit, not a subscription.
         var subs = SubscriptionDetector.Find([
-            (new(1, 5m, D(2026, 1, 5),  Netflix), "COFFEE"),
-            (new(2, 5m, D(2026, 1, 12), Netflix), "COFFEE"),
-            (new(3, 5m, D(2026, 1, 19), Netflix), "COFFEE"),
+            (new(1, -5m, D(2026, 1, 5),  Netflix), "COFFEE"),
+            (new(2, -5m, D(2026, 1, 12), Netflix), "COFFEE"),
+            (new(3, -5m, D(2026, 1, 19), Netflix), "COFFEE"),
+        ]);
+        Assert.Empty(subs);
+    }
+
+    [Fact]
+    public void RecurringIncomeIsNotASubscription()
+    {
+        // A standing transfer into savings is monthly, same amount, same "merchant" —
+        // structurally identical to a subscription, but money coming in.
+        var subs = SubscriptionDetector.Find([
+            (new(1, 600m, D(2026, 1, 16), Netflix), "TRANSFER TO SAVINGS"),
+            (new(2, 600m, D(2026, 2, 16), Netflix), "TRANSFER TO SAVINGS"),
+            (new(3, 600m, D(2026, 3, 16), Netflix), "TRANSFER TO SAVINGS"),
         ]);
         Assert.Empty(subs);
     }
@@ -116,12 +129,12 @@ public class DetectorTests
     public void SeparatesTwoDifferentSubscriptionsAtTheSamePrice()
     {
         var subs = SubscriptionDetector.Find([
-            (new(1, 9.99m, D(2026, 1, 5),  Netflix), "NETFLIX"),
-            (new(2, 9.99m, D(2026, 2, 4),  Netflix), "NETFLIX"),
-            (new(3, 9.99m, D(2026, 3, 6),  Netflix), "NETFLIX"),
-            (new(4, 9.99m, D(2026, 1, 20), Safeway), "SPOTIFY"),
-            (new(5, 9.99m, D(2026, 2, 19), Safeway), "SPOTIFY"),
-            (new(6, 9.99m, D(2026, 3, 21), Safeway), "SPOTIFY"),
+            (new(1, -9.99m, D(2026, 1, 5),  Netflix), "NETFLIX"),
+            (new(2, -9.99m, D(2026, 2, 4),  Netflix), "NETFLIX"),
+            (new(3, -9.99m, D(2026, 3, 6),  Netflix), "NETFLIX"),
+            (new(4, -9.99m, D(2026, 1, 20), Safeway), "SPOTIFY"),
+            (new(5, -9.99m, D(2026, 2, 19), Safeway), "SPOTIFY"),
+            (new(6, -9.99m, D(2026, 3, 21), Safeway), "SPOTIFY"),
         ]);
         Assert.Equal(2, subs.Count);
         Assert.All(subs, s => Assert.Equal(3, s.TransactionIds.Count));
