@@ -12,6 +12,14 @@ public class MerchantNormalizerTests
     [InlineData("SAFEWAY #1234 GROCERY", "SAFEWAY GROCERY")]
     [InlineData("PAYPAL *SPOTIFY USA", "SPOTIFY USA")]
     [InlineData("AMAZON MKTPL XXXX9931", "AMAZON MKTPL")]
+    // Reference codes are stripped whole, not reduced to letter noise.
+    [InlineData("SPOTIFY USA P0A1B2C3", "SPOTIFY USA")]
+    [InlineData("AIRBNB * HMX8821", "AIRBNB")]
+    // A processor prefix only counts when a separator follows it: "SP" must not eat
+    // the start of "SPOTIFY", nor "POS" the start of "POSTMATES".
+    [InlineData("SPOTIFY USA", "SPOTIFY USA")]
+    [InlineData("POSTMATES DELIVERY", "POSTMATES DELIVERY")]
+    [InlineData("SP * CORNER STORE", "CORNER STORE")]
     public void StripsProcessorNoiseButKeepsMerchant(string raw, string expected)
         => Assert.Equal(expected, MerchantNormalizer.Normalize(raw));
 

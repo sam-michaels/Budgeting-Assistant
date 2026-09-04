@@ -18,11 +18,15 @@ namespace BudgetAssistant.Core.Analysis;
 /// </summary>
 public static partial class MerchantNormalizer
 {
-    [GeneratedRegex(@"^(SQ|TST|SP|PY|PAYPAL|POS|DEBIT|CREDIT|PURCHASE)\s*\*?\s*")] private static partial Regex Processor();
+    // The separator is required: without it "SP" swallows the start of "SPOTIFY".
+    [GeneratedRegex(@"^(SQ|TST|SP|PY|PAYPAL|POS|DEBIT|CREDIT|PURCHASE)(\s*\*+\s*|\s+)")] private static partial Regex Processor();
     [GeneratedRegex(@"[#*]\s*\d+")]        private static partial Regex StoreNumber();
     [GeneratedRegex(@"\b[X\*]{2,}\d+\b")]  private static partial Regex MaskedCard();
     [GeneratedRegex(@"\b\d{1,2}/\d{1,2}(/\d{2,4})?\b")] private static partial Regex Date();
     [GeneratedRegex(@"\b\d{3,}\b")]        private static partial Regex LongDigits();
+    // Reference codes: 4+ char alphanumeric runs containing a digit ("P0A1B2C3", "XXXX9931").
+    // Stripped whole, otherwise the digits vanish and the letters survive as noise.
+    [GeneratedRegex(@"\b(?=[A-Z0-9]*\d)[A-Z0-9]{4,}\b")] private static partial Regex ReferenceCode();
     [GeneratedRegex(@"[^A-Z ]")]           private static partial Regex NonAlpha();
     [GeneratedRegex(@"\s+")]               private static partial Regex Whitespace();
 
@@ -34,6 +38,7 @@ public static partial class MerchantNormalizer
         s = StoreNumber().Replace(s, " ");
         s = MaskedCard().Replace(s, " ");
         s = Date().Replace(s, " ");
+        s = ReferenceCode().Replace(s, " ");
         s = LongDigits().Replace(s, " ");
         s = NonAlpha().Replace(s, " ");
         return Whitespace().Replace(s, " ").Trim();
