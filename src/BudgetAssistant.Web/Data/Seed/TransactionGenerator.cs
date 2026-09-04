@@ -40,7 +40,10 @@ public static class TransactionGenerator
     {
         var rng = new Random(seed);
         var txns = new List<GeneratedTxn>();
-        var start = today.AddMonths(-months);
+        // Run through the CURRENT month, not up to it: a dashboard whose current month is
+        // empty reads as broken. Dates after today are dropped below, so the newest month
+        // is a realistic partial one.
+        var start = today.AddMonths(-(months - 1));
 
         string Pick(string[] pool) => pool[rng.Next(pool.Length)];
         decimal Money(double lo, double hi) => Math.Round((decimal)(lo + rng.NextDouble() * (hi - lo)), 2);
@@ -94,7 +97,10 @@ public static class TransactionGenerator
         }
 
         PlantDuplicates(txns, rng);
-        return txns.OrderBy(t => t.Date).ThenBy(t => t.Description).ToList();
+
+        // No statement contains transactions that have not happened yet.
+        return txns.Where(t => t.Date <= today)
+                   .OrderBy(t => t.Date).ThenBy(t => t.Description).ToList();
     }
 
     /// <summary>Re-charges a handful of existing transactions on the same day for the same

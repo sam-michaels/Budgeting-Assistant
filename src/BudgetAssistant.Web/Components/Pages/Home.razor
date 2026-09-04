@@ -1,10 +1,12 @@
 @page "/"
 @using System.Security.Claims
+@using BudgetAssistant.Core.Abstractions
 @using BudgetAssistant.Core.Analysis
 @using BudgetAssistant.Web.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
 @inject BudgetQueries Queries
+@inject IInsightWriter InsightWriter
 @inject AuthenticationStateProvider Auth
 
 <PageTitle>Dashboard</PageTitle>
@@ -51,6 +53,23 @@ else
             <span class="label">Recurring</span>
             <span class="value">@Money(summary.Value.SubscriptionSpend)</span>
             <span class="sub">detected subscriptions</span>
+        </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:22px">
+        <div class="panel-head">
+            <h2>What changed this month</h2>
+            <span class="eyebrow">@(InsightWriter.IsModelBacked ? "written by Claude" : "generated summary")</span>
+        </div>
+        <div class="panel-body">
+            @if (insight is null)
+            {
+                <span style="color:var(--muted);font-size:14px">Summarizing…</span>
+            }
+            else
+            {
+                <p style="margin:0;font-size:15px;line-height:1.62;color:var(--ink);max-width:68ch">@insight</p>
+            }
         </div>
     </div>
 
@@ -122,6 +141,7 @@ else
     List<DateOnly> months = [];
     DateOnly month = DateOnly.FromDateTime(DateTime.UtcNow);
     int uncategorized;
+    string? insight;
     string userId = "";
 
     protected override async Task OnInitializedAsync()
@@ -138,6 +158,12 @@ else
         summary = await Queries.SummaryAsync(userId, month);
         uncategorized = (await Queries.TransactionsAsync(userId, take: 500, onlyFlagged: true))
             .Count(t => t.Category is null);
+
+        // Render the figures first, then fill the prose in — the summary may involve a
+        // network call, and the numbers should not wait on it.
+        insight = null;
+        StateHasChanged();
+        insight = await InsightWriter.WriteAsync(InsightPayload.From(summary.Value));
     }
 
     async Task OnMonthChanged(ChangeEventArgs e)

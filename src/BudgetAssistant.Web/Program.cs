@@ -1,5 +1,6 @@
 using BudgetAssistant.Web.Components;
 using BudgetAssistant.Web.Components.Account;
+using Anthropic;
 using BudgetAssistant.Core.Abstractions;
 using BudgetAssistant.Web.Data;
 using BudgetAssistant.Web.Data.Seed;
@@ -70,6 +71,22 @@ builder.Services.AddScoped<VectorSearch>();
 builder.Services.AddScoped<BudgetQueries>();
 builder.Services.AddScoped<TransactionCategorizer>();
 builder.Services.AddScoped<DatabaseSeeder>();
+builder.Services.AddMemoryCache();
+
+// The LLM summary is optional. With a key, Claude writes it; without one, a deterministic
+// template writes the same facts. Same endpoint, same response shape, no crash either way —
+// so the build and the deployed demo never depend on a third-party key being present.
+var anthropicKey = builder.Configuration["Anthropic:ApiKey"]
+    ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+if (!string.IsNullOrWhiteSpace(anthropicKey))
+{
+    builder.Services.AddSingleton(new AnthropicClient { ApiKey = anthropicKey });
+    builder.Services.AddScoped<IInsightWriter, ClaudeInsightWriter>();
+}
+else
+{
+    builder.Services.AddScoped<IInsightWriter, TemplateInsightWriter>();
+}
 
 var app = builder.Build();
 
