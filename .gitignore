@@ -1,0 +1,28 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# User/IDE
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+*.DotSettings.user
+
+# Secrets — never commit. Use dotnet user-secrets locally, env vars in prod.
+appsettings.*.local.json
+*.env
+.env
+
+# OS
+.DS_Store
+
+# Test output
+[Tt]est[Rr]esult*/
+coverage*
+
+# NOTE: models/bge-micro-v2/*.onnx IS committed on purpose. See that dir's README.
