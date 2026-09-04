@@ -30,8 +30,9 @@ primary_region = "sjc"
   min_machines_running = 0
 
 [[vm]]
-  # 512MB, not the free 256MB: ONNX Runtime plus the embedding model does not fit
-  # comfortably in 256 and the container is OOM-killed under load.
+  # Measured: the container idles at ~128MB with the model loaded, so 256MB would serve
+  # a browsing visitor. The headroom is for bulk embedding — a CSV import runs thousands
+  # of inferences back to back.
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1

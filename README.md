@@ -181,5 +181,8 @@ fly deploy
 
 Migrations run as an explicit release step (`dotnet BudgetAssistant.Web.dll --migrate`),
 never implicitly on startup — an instance rolling out should not silently alter a
-production schema. The VM is sized at 512MB rather than the free 256MB, because ONNX
-Runtime plus the model does not fit comfortably in 256.
+production schema.
+
+The VM is sized at 512MB. The container idles at ~128MB with the model loaded, so the
+free 256MB tier would serve a browsing visitor; the headroom is for bulk embedding, where
+a CSV import runs thousands of inferences back to back.
