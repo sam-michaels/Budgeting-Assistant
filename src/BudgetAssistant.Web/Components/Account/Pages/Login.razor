@@ -20,7 +20,19 @@
             <StatusMessage Message="@errorMessage" />
             <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
                 <DataAnnotationsValidator />
-                <h2>Use a local account to log in.</h2>
+                <form action="Account/DemoLogin" method="post" style="margin-bottom:22px">
+                <AntiforgeryToken />
+                <button type="submit" class="btn primary" style="width:100%;padding:11px">
+                    Try the demo &rarr;
+                </button>
+                <p style="font-size:13px;color:var(--muted);margin:9px 0 0;text-align:center">
+                    Six months of seeded transactions, categorized automatically. No sign-up.
+                </p>
+            </form>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;color:var(--faint);font-size:12px">
+                <span style="flex:1;height:1px;background:var(--rule)"></span>OR<span style="flex:1;height:1px;background:var(--rule)"></span>
+            </div>
+            <h2>Use a local account to log in.</h2>
                 <hr />
                 <ValidationSummary class="text-danger" role="alert" />
                 <div class="form-floating mb-3">

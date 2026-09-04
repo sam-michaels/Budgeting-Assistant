@@ -1,0 +1,193 @@
+@page "/import"
+@using System.Security.Claims
+@using BudgetAssistant.Core.Entities
+@using BudgetAssistant.Web.Data
+@using BudgetAssistant.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize]
+@inject BudgetQueries Queries
+@inject ApplicationDbContext Db
+@inject TransactionCategorizer Categorizer
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider Auth
+
+<PageTitle>Import transactions</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Import a statement</h1>
+        <p>Upload a CSV export. Categories are inferred before anything is saved, so you see what will happen first.</p>
+    </div>
+</div>
+
+<div class="panel" style="margin-bottom:18px">
+    <div class="panel-body">
+        <div class="toolbar">
+            <select class="control" @bind="accountId">
+                @foreach (var a in accounts)
+                {
+                    <option value="@a.Id">@a.Name</option>
+                }
+            </select>
+            <InputFile OnChange="OnFileAsync" accept=".csv,text/csv" class="control" />
+            @if (busy)
+            {
+                <span style="font-size:13.5px;color:var(--muted)">@status</span>
+            }
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin:12px 0 0">
+            Expects a <strong>date</strong>, a <strong>description</strong>, and either an
+            <strong>amount</strong> or a <strong>debit</strong>/<strong>credit</strong> pair.
+            Header names are matched loosely, so most bank exports work unchanged.
+        </p>
+    </div>
+</div>
+
+@if (errors.Count > 0)
+{
+    <div class="panel" style="margin-bottom:18px;border-color:var(--flag)">
+        <div class="panel-head"><h2 style="color:var(--flag)">@errors.Count row@(errors.Count == 1 ? "" : "s") skipped</h2></div>
+        <div class="panel-body">
+            <ul style="margin:0;padding-left:18px;font-size:13.5px;color:var(--muted)">
+                @foreach (var e in errors.Take(10)) { <li>@e</li> }
+            </ul>
+            @if (errors.Count > 10) { <p style="font-size:13px;color:var(--faint);margin:8px 0 0">…and @(errors.Count - 10) more.</p> }
+        </div>
+    </div>
+}
+
+@if (preview.Count > 0)
+{
+    <div class="panel">
+        <div class="panel-head">
+            <h2>@preview.Count transactions ready</h2>
+            <button class="btn primary" @onclick="ConfirmAsync" disabled="@busy">
+                Import @preview.Count transactions
+            </button>
+        </div>
+        <div class="table-scroll">
+            <table class="data">
+                <thead>
+                    <tr><th>Date</th><th>Description</th><th>Category</th><th>Confidence</th><th style="text-align:right">Amount</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in preview.Take(100))
+                    {
+                        <tr>
+                            <td class="date">@t.Date.ToString("MMM d")</td>
+                            <td class="desc">@t.RawDescription</td>
+                            <td>
+                                @if (t.CategoryId is { } id)
+                                {
+                                    var cat = categories.First(c => c.Id == id);
+                                    <span class="chip"><span class="dot" style="background:@cat.Color"></span>@cat.Name</span>
+                                }
+                                else
+                                {
+                                    <span class="chip none">uncategorized</span>
+                                }
+                            </td>
+                            <td>
+                                @if (t.CategoryConfidence is { } conf)
+                                {
+                                    <span class="conf" title="@($"Nearest labelled merchant: {t.CategoryMatchedOn}")">
+                                        <span class="conf-track @(conf < 0.7f ? "low" : "")"><span style="width:@((int)(conf * 100))%"></span></span>
+                                        <span class="conf-val">@conf.ToString("P0")</span>
+                                    </span>
+                                }
+                                else { <span class="conf-val">—</span> }
+                            </td>
+                            <td class="amt @(t.Amount > 0 ? "pos" : "")">@t.Amount.ToString("C2")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (preview.Count > 100)
+        {
+            <div class="panel-body" style="border-top:1px solid var(--rule);font-size:13px;color:var(--muted)">
+                Showing the first 100. All @preview.Count will be imported.
+            </div>
+        }
+    </div>
+}
+
+@code {
+    // 8MB: a decade of statements is well under this, and it bounds what one upload can
+    // pull into server memory.
+    const long MaxUploadBytes = 8L * 1024 * 1024;
+
+    List<AccountDto> accounts = [];
+    List<Category> categories = [];
+    List<Transaction> preview = [];
+    List<string> errors = [];
+    int accountId;
+    bool busy;
+    string status = "";
+    string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        accounts = await Queries.AccountsAsync(userId);
+        categories = await Db.Categories.ToListAsync();
+        accountId = accounts.FirstOrDefault()?.Id ?? 0;
+    }
+
+    async Task OnFileAsync(InputFileChangeEventArgs e)
+    {
+        preview = [];
+        errors = [];
+        busy = true;
+        status = "Reading…";
+
+        try
+        {
+            await using var stream = e.File.OpenReadStream(MaxUploadBytes);
+            using var reader = new StreamReader(stream);
+            var parsed = CsvTransactionReader.Read(reader);
+            errors = parsed.Errors;
+
+            if (parsed.Rows.Count == 0) return;
+
+            status = $"Classifying {parsed.Rows.Count} transactions…";
+            StateHasChanged();
+
+            foreach (var row in parsed.Rows)
+            {
+                var txn = new Transaction
+                {
+                    AccountId = accountId,
+                    Date = row.Date,
+                    RawDescription = row.Description,
+                    Amount = row.Amount,
+                };
+                await Categorizer.ClassifyAsync(txn, userId);
+                preview.Add(txn);
+            }
+        }
+        catch (IOException)
+        {
+            errors = [$"That file is larger than {MaxUploadBytes / 1024 / 1024}MB. Split it and import each part."];
+        }
+        finally
+        {
+            busy = false;
+            status = "";
+        }
+    }
+
+    async Task ConfirmAsync()
+    {
+        busy = true;
+        Db.Transactions.AddRange(preview);
+
+        var account = await Db.Accounts.FirstAsync(a => a.Id == accountId && a.UserId == userId);
+        account.Balance += preview.Sum(t => t.Amount);
+
+        await Db.SaveChangesAsync();
+        Nav.NavigateTo("/transactions");
+    }
+}

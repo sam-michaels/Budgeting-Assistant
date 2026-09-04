@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BudgetAssistant.Core\BudgetAssistant.Core.csproj" />
+    <ProjectReference Include="..\..\src\BudgetAssistant.Web\BudgetAssistant.Web.csproj" />
   </ItemGroup>
 
 </Project>

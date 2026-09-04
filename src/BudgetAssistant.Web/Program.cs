@@ -101,5 +101,6 @@ app.MapStaticAssets();
 app.MapControllers();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.MapAdditionalIdentityEndpoints();
+app.MapDemoLogin();
 
 app.Run();
