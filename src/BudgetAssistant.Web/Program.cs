@@ -90,8 +90,21 @@ else
 
 var app = builder.Build();
 
-// Seeding is idempotent and only fills an empty database. Migrations are deliberately NOT
-// applied here — they run as an explicit, reviewable release step.
+// `dotnet BudgetAssistant.Web.dll --migrate` applies migrations and exits, so a release
+// pipeline can run schema changes as their own reviewable step against the same image
+// that will serve traffic. Migrations are never applied implicitly on startup: an app
+// instance rolling out should not silently alter a production schema.
+if (args.Contains("--migrate"))
+{
+    await using var migrationScope = app.Services.CreateAsyncScope();
+    var db = migrationScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    app.Logger.LogInformation("Applying migrations…");
+    await db.Database.MigrateAsync();
+    app.Logger.LogInformation("Migrations applied.");
+    return;
+}
+
+// Seeding is idempotent and only fills an empty database.
 await using (var scope = app.Services.CreateAsyncScope())
 {
     await scope.ServiceProvider.GetRequiredService<DatabaseSeeder>().SeedAsync();

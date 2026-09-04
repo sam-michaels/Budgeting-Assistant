@@ -1,9 +1,12 @@
 # Budgeting Assistant — Build Handoff
 
-Paused end of Day 1 foundation. Everything committed on branch `feat/foundation`;
-working tree clean apart from a pre-existing `README.md` edit that predates this work.
+Days 1 and 2 complete; Day 3 nearly complete. Everything committed on branch
+`feat/foundation`.
 
-**State: builds clean, 27 tests pass, database schema live.**
+**State: builds clean, 55 tests pass, app runs, seeded demo works end to end.**
+
+What remains is the actual deploy (needs your accounts) and a browser pass over the
+CSV import page. Everything else on the original plan is done.
 
 ---
 
@@ -145,71 +148,42 @@ DbContext) is provider-agnostic; document the one-line swap in the README.
 
 ## 4. What is left
 
-### Day 1 remainder — finish the data layer
+### Blocked on you — the deploy
 
-1. **Register services in `Program.cs`.** `LocalTextEmbedder` as a singleton,
-   `VectorSearch` as scoped. Neither is wired up yet.
-2. **HNSW index migration**, as its own commit:
-   ```sql
-   CREATE INDEX ON "Transactions" USING hnsw ("Embedding" vector_cosine_ops);
-   CREATE INDEX ON "MerchantExamples" USING hnsw ("Embedding" vector_cosine_ops);
+Everything is deploy-ready: `Dockerfile`, `.dockerignore` and `fly.toml` are committed,
+migrations run as an explicit release step, and the VM is sized at 512MB. What I cannot do
+is create accounts on your behalf.
+
+1. **Create a Postgres database** on [Neon](https://neon.tech) or
+   [Supabase](https://supabase.com) — free tier, and both ship pgvector enabled, which
+   Fly's own managed Postgres does not reliably. Copy the connection string.
+2. **Create the Fly app** (`fly launch --no-deploy`, or `fly apps create budget-assistant`).
+   Edit the `app =` line in `fly.toml` if you pick a different name.
+3. **Set the secret and deploy:**
+   ```bash
+   fly secrets set ConnectionStrings__DefaultConnection="Host=...;Database=...;Username=...;Password=...;SSL Mode=Require"
+   fly deploy
    ```
-   Use `migrationBuilder.Sql(...)` in an empty migration.
-3. **Seeder.** Categories and `MerchantExamples` from `SeedCorpus`, each embedded
-   once at startup. Then a demo user, 2–3 accounts, and ~800 transactions across
-   6 months.
-   - Merchant strings must stay **messy** — clean data makes the embeddings look
-     pointless.
-   - **Deliberately plant** what the detectors are supposed to find: a few
-     same-day double charges, and 4–5 monthly subscriptions where some use rotating
-     reference codes (that case is the argument for vectors over string matching).
-   - Seed only when the database is empty, and never auto-apply migrations.
+   The release step applies migrations; the app seeds itself on first boot.
+4. **Optional** — turn on the Claude-written summary in place of the template:
+   ```bash
+   fly secrets set Anthropic__ApiKey="sk-ant-..."
+   ```
 
-### Day 2 — the actual product
+### Worth doing, small
 
-4. **Categorization pipeline.** On insert: normalize → embed →
-   `VectorSearch.FindLabeledNeighborsAsync` → `KnnCategorizer.Suggest`. Persist
-   `CategoryId`, `CategorySource`, `CategoryConfidence`. Leave uncategorized below
-   the floor rather than guessing.
-5. **Run the detectors** and persist `DuplicateOfId` / `IsSubscription`.
-6. **API controllers + Swagger.** CRUD for accounts/transactions/categories.
-   Swagger is already wired in `Program.cs`; no controllers exist yet.
-7. **Blazor pages.** Dashboard (category totals, month-over-month), Transactions
-   (list/edit, showing confidence and the matched example), Accounts.
-   Template pages `Counter.razor` / `Weather.razor` are already deleted.
-8. **More tests.** Monthly-summary and MoM math are specified but not yet written —
-   `Core.Tests` currently covers the normalizer, categorizer and both detectors only.
-
-### Day 3 — ship it
-
-9. **CSV import** (CsvHelper is already installed). The demo moment is a reviewer
-   uploading their own bank export and watching it categorize correctly.
-10. **Insights endpoint.** Aggregate category totals, MoM deltas and flagged items
-    into a payload containing **no raw descriptions and no PII**. With
-    `Anthropic:ApiKey` set, Claude writes the narrative; without it, a deterministic
-    template renders the same facts. Cache per (user, month). A missing key must
-    never crash. `Anthropic.SDK` is NOT yet installed.
-11. **One-click demo login.** Real Identity underneath, plus a "Try the demo"
-    button that signs into the seeded account — a login wall kills recruiter
-    interest. `RequireConfirmedAccount` is already set to false (there is no email
-    sender).
-12. **Deploy.** App on Fly.io, Postgres on **Neon or Supabase** (both ship pgvector
-    enabled; Fly's own managed Postgres does not reliably). Size the VM at
-    **512MB, not the free 256MB** — ONNX Runtime plus the model will not fit
-    comfortably in 256MB. Migrations run as an explicit release step.
-13. **Rewrite `README.md`.** It still describes the original SQL Server plan and is
-    largely inaccurate. It has an uncommitted edit from before this work started.
-    Document the architecture decisions in section 3 — the reasoning is the part
-    worth showing an interviewer.
-
-### Deliberately skipped
-
-- RAG chat box — you chose categorization, which is the stronger engineering story.
-- Testcontainers integration tests — stretch goal; the day-3 budget will not hold them.
-- A separate `Infrastructure` project — Core is already dependency-free, which is the
-  property that matters. ~15 minutes to add if you want the 4-layer split.
-
----
+- **Click through the CSV import page in a browser.** `CsvTransactionReader` has 7 unit
+  tests, but the `InputFile` binding on `/import` has never been exercised by hand. A
+  ready-made file is at `/tmp/statement.csv` (it includes two deliberately bad rows to
+  confirm they are reported and skipped). The Chrome extension disconnected mid-session,
+  which is why this is outstanding.
+- **`ZUNI CAFE` classifies as Coffee.** It is a restaurant; the word "CAFE" pulls it. The
+  confidence correctly reads 0.63, so it surfaces for review rather than asserting
+  certainty. Left as-is deliberately: it is honest model behaviour and a good talking
+  point, not a bug to hide.
+- **Consider handling transfers as their own concept.** `TRANSFER TO SAVINGS` is the only
+  thing left uncategorized, correctly — it is not a merchant. A real budgeting app treats
+  transfers as neither income nor spending; right now it just sits blank.
 
 ## 5. Resuming
 
