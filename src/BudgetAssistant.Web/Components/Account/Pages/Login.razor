@@ -66,12 +66,6 @@
     <a href="Account/ResendEmailConfirmation">Resend confirmation</a>
 </p>
 
-<div class="auth-sep">or use another service</div>
-
-<div class="auth-card">
-    <ExternalLoginPicker/>
-</div>
-
 @code {
     private string? errorMessage;
     private EditContext editContext = default!;
@@ -85,8 +79,16 @@
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
 
+    [SupplyParameterFromQuery(Name = "demoUnavailable")]
+    private bool DemoUnavailable { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (DemoUnavailable)
+        {
+            errorMessage = "Error: the demo account has not been seeded yet. Check the app log.";
+        }
+
         Input ??= new();
 
         editContext = new EditContext(Input);
