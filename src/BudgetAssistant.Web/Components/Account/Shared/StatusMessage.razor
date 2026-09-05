@@ -1,7 +1,7 @@
 ﻿@if (!string.IsNullOrEmpty(DisplayMessage))
 {
-    var statusMessageClass = DisplayMessage.StartsWith("Error") ? "danger" : "success";
-    <div class="alert alert-@statusMessageClass" role="alert">
+    var statusMessageClass = DisplayMessage.StartsWith("Error") ? "bad" : "";
+    <div class="note @statusMessageClass" role="alert" style="margin-bottom:16px">
         @DisplayMessage
     </div>
 }

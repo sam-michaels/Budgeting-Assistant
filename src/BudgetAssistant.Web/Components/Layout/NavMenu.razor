@@ -1,53 +1,38 @@
 @implements IDisposable
 @inject NavigationManager NavigationManager
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Budget Assistant</a>
-    </div>
-</div>
+<header class="topbar">
+    <a class="brand" href="">Budget Assistant</a>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+    @* A checkbox rather than an @onclick handler: the Identity pages render
+       statically, where an event handler would never fire. No JavaScript either. *@
+    <input type="checkbox" id="nav-toggle" class="nav-toggle-input" />
+    <label class="nav-toggle" for="nav-toggle">Menu</label>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Dashboard</NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="transactions">Transactions</NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="accounts">Accounts</NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="import">Import CSV</NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="swagger" Match="NavLinkMatch.Prefix">API docs</NavLink>
-        </div>
+    <nav class="topnav">
+        <NavLink href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+        <NavLink href="transactions">Transactions</NavLink>
+        <NavLink href="accounts">Accounts</NavLink>
+        <NavLink href="import">Import</NavLink>
 
+        <span class="spacer"></span>
+
+        <a href="swagger" target="_blank" rel="noopener">API</a>
         <AuthorizeView>
             <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Manage">@context.User.Identity?.Name</NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <form action="Account/Logout" method="post">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
-                        <button type="submit" class="nav-link">Sign out</button>
-                    </form>
-                </div>
+                <NavLink href="Account/Manage">@context.User.Identity?.Name</NavLink>
+                <form action="Account/Logout" method="post">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                    <button type="submit">Sign out</button>
+                </form>
             </Authorized>
             <NotAuthorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Login">Sign in</NavLink>
-                </div>
+                <NavLink href="Account/Login">Sign in</NavLink>
             </NotAuthorized>
         </AuthorizeView>
     </nav>
-</div>
+</header>
 
 @code {
     private string? currentUrl;

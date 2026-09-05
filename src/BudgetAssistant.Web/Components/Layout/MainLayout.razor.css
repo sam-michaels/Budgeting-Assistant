@@ -1,8 +1,0 @@
-/* Layout structure only. All colour lives in wwwroot/app.css so the palette has
-   a single source of truth; the template's default gradient was removed. */
-.page { position: relative; display: flex; flex-direction: column; }
-
-@media (min-width: 641px) {
-    .page { flex-direction: row; }
-    .sidebar { position: sticky; top: 0; height: 100vh; }
-}

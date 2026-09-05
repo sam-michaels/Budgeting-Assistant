@@ -13,11 +13,11 @@
 
 <h3>Manage your passkeys</h3>
 
-<StatusMessage />
+<StatusMessage/>
 
-@if (currentPasskeys is { Count: > 0 })
+@if (currentPasskeys is { Count:> 0 })
 {
-    <table class="table">
+    <table class="data">
         <tbody>
             @foreach (var passkey in currentPasskeys)
             {
@@ -28,11 +28,11 @@
                             var credentialId = Base64Url.EncodeToString(passkey.CredentialId);
                         }
                         <form @formname="@($"update-passkey-{credentialId}")" @onsubmit="UpdatePasskey" method="post">
-                            <AntiforgeryToken />
+                            <AntiforgeryToken/>
                             <div>
-                                <input type="hidden" name="CredentialId" value="@credentialId" />
-                                <button type="submit" name="Action" value="rename" class="btn btn-primary" title="Rename this passkey">Rename</button>
-                                <button type="submit" name="Action" value="delete" class="btn btn-danger" title="Remove this passkey from your account">Delete</button>
+                                <input type="hidden" name="CredentialId" value="@credentialId"/>
+                                <button type="submit" name="Action" value="rename" class="btn primary" title="Rename this passkey">Rename</button>
+                                <button type="submit" name="Action" value="delete" class="btn danger" title="Remove this passkey from your account">Delete</button>
                             </div>
                         </form>
                     </td>
@@ -47,14 +47,14 @@ else
 }
 
 <form @formname="add-passkey" @onsubmit="AddPasskey" method="post">
-    <AntiforgeryToken />
-    @if (currentPasskeys is { Count: >= MaxPasskeyCount })
+    <AntiforgeryToken/>
+    @if (currentPasskeys is { Count:>= MaxPasskeyCount })
     {
-        <p class="text-danger">You have reached the maximum number of allowed passkeys. Please delete one before adding a new one.</p>
+        <p class="validation-message">You have reached the maximum number of allowed passkeys. Please delete one before adding a new one.</p>
     }
     else
     {
-        <PasskeySubmit Operation="PasskeyOperation.Create" Name="Input" class="btn btn-primary">Add a new passkey</PasskeySubmit>
+        <PasskeySubmit Operation="PasskeyOperation.Create" Name="Input" class="btn primary">Add a new passkey</PasskeySubmit>
     }
 
 </form>
@@ -110,7 +110,7 @@ else
             return;
         }
 
-        if (currentPasskeys!.Count >= MaxPasskeyCount)
+        if (currentPasskeys!.Count>= MaxPasskeyCount)
         {
             RedirectManager.RedirectToCurrentPageWithStatus($"Error: You have reached the maximum number of allowed passkeys.", HttpContext);
             return;

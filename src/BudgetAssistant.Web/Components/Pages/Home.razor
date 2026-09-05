@@ -13,12 +13,22 @@
 
 <div class="page-head">
     <div>
-        <h1>Dashboard</h1>
-        <p>Spending for @month.ToString("MMMM yyyy"), categorized automatically.</p>
+        <h1>@month.ToString("MMMM yyyy")</h1>
+        @if (summary is { } s)
+        {
+            <p class="statline">
+                <b>@Money(s.Spending)</b> spent
+                <span class="sep">·</span>
+                <b class="@(s.Net >= 0 ? "pos" : "")">@Money(Math.Abs(s.Net))</b>
+                @(s.Net >= 0 ? "saved" : "overspent")
+                <span class="sep">·</span>
+                <b>@Money(s.SubscriptionSpend)</b> recurring
+            </p>
+        }
     </div>
-    @if (months.Count > 0)
+    @if (months.Count > 1)
     {
-        <select class="control" @onchange="OnMonthChanged" value="@month.ToString("yyyy-MM")">
+        <select class="control" @onchange="OnMonthChanged" value="@month.ToString("yyyy-MM")" aria-label="Month">
             @foreach (var m in months)
             {
                 <option value="@m.ToString("yyyy-MM")">@m.ToString("MMMM yyyy")</option>
@@ -29,115 +39,100 @@
 
 @if (summary is null)
 {
-    <div class="panel"><div class="empty">Loading…</div></div>
+    <section class="insight"><p class="waiting">Loading your month…</p></section>
 }
 else
 {
-    <div class="kpis">
-        <div class="kpi">
-            <span class="label">Income</span>
-            <span class="value pos">@Money(summary.Value.Income)</span>
-            <span class="sub">@month.ToString("MMM yyyy")</span>
-        </div>
-        <div class="kpi">
-            <span class="label">Spending</span>
-            <span class="value">@Money(summary.Value.Spending)</span>
-            <span class="sub">across @summary.Value.ByCategory.Count categories</span>
-        </div>
-        <div class="kpi">
-            <span class="label">Net</span>
-            <span class="value @(summary.Value.Net >= 0 ? "pos" : "")">@Money(summary.Value.Net)</span>
-            <span class="sub">@(summary.Value.Net >= 0 ? "saved this month" : "overspent this month")</span>
-        </div>
-        <div class="kpi">
-            <span class="label">Recurring</span>
-            <span class="value">@Money(summary.Value.SubscriptionSpend)</span>
-            <span class="sub">detected subscriptions</span>
-        </div>
-    </div>
-
-    <div class="panel" style="margin-bottom:22px">
-        <div class="panel-head">
-            <h2>What changed this month</h2>
-            <span class="eyebrow">@Provenance</span>
-        </div>
-        <div class="panel-body">
-            @if (insight is null)
-            {
-                <span style="color:var(--muted);font-size:14px">Summarizing…</span>
-            }
-            else
-            {
-                <p style="margin:0;font-size:15px;line-height:1.62;color:var(--ink);max-width:68ch">@insight</p>
-            }
-        </div>
-    </div>
+    @* The figures are on the line above. This is the sentence that says what changed —
+       the one thing on the page you could not have worked out yourself — so it leads. *@
+    <section class="insight">
+        @if (insight is null)
+        {
+            <p class="waiting">Reading the month…</p>
+        }
+        else
+        {
+            <p>@insight</p>
+            <p class="provenance">@Provenance</p>
+        }
+    </section>
 
     <div class="grid-2">
-        <div class="panel">
-            <div class="panel-head">
-                <h2>Where the money went</h2>
-                <span class="eyebrow">vs. previous month</span>
+        <div class="section">
+            <div class="section-head">
+                <h2>Where it went</h2>
+                <span class="section-note">change vs. @month.AddMonths(-1).ToString("MMMM")</span>
             </div>
-            <div class="panel-body">
-                @if (summary.Value.ByCategory.Count == 0)
-                {
-                    <div class="empty">No categorized spending this month.</div>
-                }
-                else
-                {
-                    var max = summary.Value.ByCategory.Max(c => c.Amount);
-                    @foreach (var cat in summary.Value.ByCategory)
+            <div class="card">
+                <div class="card-body">
+                    @if (rows.Count == 0)
                     {
-                        <div class="cat-row">
-                            <span class="cat-name">
-                                <span class="dot" style="background:@cat.Color"></span>@cat.Category
-                            </span>
-                            <span class="cat-amt">
-                                @Money(cat.Amount)
-                                <span class="delta @DeltaClass(cat)">@DeltaText(cat)</span>
-                            </span>
-                            <span class="bar">
-                                <span style="width:@(Pct(cat.Amount, max))%;background:@cat.Color"></span>
-                            </span>
-                        </div>
+                        <div class="empty">Nothing categorized this month yet.</div>
                     }
-                }
+                    else
+                    {
+                        var max = rows.Max(r => r.Amount);
+                        @foreach (var r in rows)
+                        {
+                            <div class="cat-row @(r.IsOther ? "other" : "")">
+                                <span class="cat-name">@r.Name</span>
+                                <span class="cat-amt">@Money(r.Amount)</span>
+                                <span class="cat-delta @r.ChangeClass">@r.Change</span>
+                                <span class="bar"><span style="width:@Pct(r.Amount, max)%"></span></span>
+                            </div>
+                        }
+                    }
+                </div>
             </div>
         </div>
 
-        <div class="panel">
-            <div class="panel-head"><h2>Needs attention</h2></div>
-            <div class="panel-body">
-                <div class="cat-row">
-                    <span class="cat-name">Possible double charges</span>
-                    <span class="cat-amt">@summary.Value.DuplicateCount</span>
-                </div>
-                @if (summary.Value.DuplicateCount > 0)
-                {
-                    <p style="font-size:13px;color:var(--muted);margin:10px 0 16px">
-                        @summary.Value.DuplicateAmount.ToString("C2") charged twice by the same merchant,
-                        for the same amount, within three days.
-                    </p>
-                }
-                <div class="cat-row">
-                    <span class="cat-name">Uncategorized</span>
-                    <span class="cat-amt">@uncategorized</span>
-                </div>
-                <p style="font-size:13px;color:var(--muted);margin:10px 0 0">
-                    Nothing close enough in the merchant history to classify confidently.
-                    Left blank rather than guessed.
-                </p>
-                <div style="margin-top:16px">
-                    <a class="btn" href="transactions?flagged=true">Review flagged →</a>
+        <div class="section">
+            <div class="section-head"><h2>Needs attention</h2></div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="att-row">
+                        <div class="att-head">
+                            <span>Possible double charges</span>
+                            <span class="n">@summary.Value.DuplicateCount</span>
+                        </div>
+                        @if (summary.Value.DuplicateCount > 0)
+                        {
+                            <p>
+                                @Money2(summary.Value.DuplicateAmount) charged twice by the same merchant,
+                                for the same amount, within three days.
+                            </p>
+                        }
+                    </div>
+                    <div class="att-row">
+                        <div class="att-head">
+                            <span>Uncategorized</span>
+                            <span class="n">@uncategorized</span>
+                        </div>
+                        <p>
+                            Nothing close enough in the merchant history to classify confidently.
+                            Left blank rather than guessed.
+                        </p>
+                    </div>
                 </div>
             </div>
+            @if (summary.Value.DuplicateCount + uncategorized > 0)
+            {
+                <p style="margin-top:14px"><a class="btn" href="transactions?flagged=true">Review flagged</a></p>
+            }
         </div>
     </div>
 }
 
 @code {
+    /// <summary>Rows beyond this fold into a single "smaller categories" row. A ranked bar
+    /// list stops being readable long before fourteen rows, and the tail is individually
+    /// too small to act on.</summary>
+    const int TopCategories = 7;
+
+    readonly record struct Row(string Name, decimal Amount, string Change, string ChangeClass, bool IsOther);
+
     MonthlySummary? summary;
+    List<Row> rows = [];
     List<DateOnly> months = [];
     DateOnly month = DateOnly.FromDateTime(DateTime.UtcNow);
     int uncategorized;
@@ -155,16 +150,48 @@ else
 
     async Task LoadAsync()
     {
-        summary = await Queries.SummaryAsync(userId, month);
+        var s = await Queries.SummaryAsync(userId, month);
+        summary = s;
+        rows = BuildRows(s.ByCategory);
         uncategorized = (await Queries.TransactionsAsync(userId, take: 500, onlyFlagged: true))
             .Count(t => t.Category is null);
 
         // Render the figures first, then fill the prose in — the summary may involve a
-        // network call, and the numbers should not wait on it.
+        // model, and the numbers should not wait on it.
         insight = null;
         StateHasChanged();
-        insight = await InsightWriter.WriteAsync(InsightPayload.From(summary.Value));
+        insight = await InsightWriter.WriteAsync(InsightPayload.From(s));
     }
+
+    static List<Row> BuildRows(IReadOnlyList<CategoryTotal> cats)
+    {
+        // Folding one category into "Other" helps nobody, so only fold a real tail.
+        if (cats.Count <= TopCategories + 1)
+            return cats.Select(ToRow).ToList();
+
+        var rows = cats.Take(TopCategories).Select(ToRow).ToList();
+        var tail = cats.Skip(TopCategories).ToList();
+        rows.Add(new Row($"{tail.Count} smaller categories", tail.Sum(c => c.Amount), "", "", true));
+        return rows;
+    }
+
+    static Row ToRow(CategoryTotal c) => new(c.Category, c.Amount, ChangeText(c), ChangeClass(c), false);
+
+    static string ChangeClass(CategoryTotal c) => c.Delta > 0 ? "up" : c.Delta < 0 ? "down" : "";
+
+    static string ChangeText(CategoryTotal c) => c.DeltaFraction switch
+    {
+        null when c.Amount > 0 => "new",
+        null => "",
+        var f when Math.Abs(f.Value) < 0.01m => "—",
+        var f => (f > 0 ? "+" : "−") + Math.Abs(f.Value).ToString("P0"),
+    };
+
+    /// <summary>Names what wrote the prose. Local models, Claude and the template all reach
+    /// this panel, and the reader should be able to tell which they got.</summary>
+    string Provenance => InsightWriter.Source == IInsightWriter.Template
+        ? "written from a template — no model is running"
+        : $"written by {InsightWriter.Source}";
 
     async Task OnMonthChanged(ChangeEventArgs e)
     {
@@ -176,23 +203,10 @@ else
         }
     }
 
-    /// <summary>Names what wrote the prose. Local models, Claude and the template all
-    /// reach this panel, and the reader should be able to tell which they got.</summary>
-    string Provenance => InsightWriter.Source == IInsightWriter.Template
-        ? "generated summary"
-        : $"written by {InsightWriter.Source}";
+    static readonly System.Globalization.CultureInfo Usd =
+        System.Globalization.CultureInfo.GetCultureInfo("en-US");
 
-    static string Money(decimal d) => d.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    static string Money(decimal d) => d.ToString("C0", Usd);
+    static string Money2(decimal d) => d.ToString("C2", Usd);
     static int Pct(decimal part, decimal whole) => whole == 0 ? 0 : (int)Math.Round(part / whole * 100);
-
-    static string DeltaClass(CategoryTotal c) =>
-        c.Delta > 0 ? "up" : c.Delta < 0 ? "down" : "flat";
-
-    static string DeltaText(CategoryTotal c) => c.DeltaFraction switch
-    {
-        null when c.Amount > 0 => "new",
-        null => "",
-        var f when Math.Abs(f.Value) < 0.01m => "flat",
-        var f => (f > 0 ? "+" : "") + f.Value.ToString("P0"),
-    };
 }

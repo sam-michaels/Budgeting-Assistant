@@ -9,7 +9,7 @@
 @inject IdentityRedirectManager RedirectManager
 
 <EditForm Model="Input" OnValidSubmit="Rename" FormName="rename-passkey" method="post">
-    <DataAnnotationsValidator />
+    <DataAnnotationsValidator/>
     @if (passkey?.Name is { } name)
     {
         <h4>Enter a new name for your "@name" passkey</h4>
@@ -18,15 +18,15 @@
     {
         <h4>Enter a name for your passkey</h4>
     }
-    <hr />
-    <ValidationSummary class="text-danger" role="alert" />
-    <div class="form-floating mb-3">
-        <InputText @bind-Value="Input.Name" id="Input.Name" class="form-control" aria-required="true" placeholder="My passkey" />
-        <label for="Input.Name" class="form-label">Passkey name</label>
-        <ValidationMessage For="() => Input.Name" class="text-danger" />
+    <hr/>
+    <ValidationSummary class="validation-message" role="alert"/>
+    <div class="field">
+        <InputText @bind-Value="Input.Name" id="Input.Name" class="control" aria-required="true" placeholder="My passkey"/>
+        <label for="Input.Name">Passkey name</label>
+        <ValidationMessage For="() => Input.Name" class="validation-message"/>
     </div>
     <div>
-        <button type="submit" class="w-100 btn btn-lg btn-primary">Continue</button>
+        <button type="submit" class="btn primary wide">Continue</button>
     </div>
 </EditForm>
 

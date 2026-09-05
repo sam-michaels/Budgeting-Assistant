@@ -15,23 +15,23 @@
 <div class="page-head">
     <div>
         <h1>Transactions</h1>
-        <p>Each category was inferred from the merchant text. Hover a match to see what it matched.</p>
+        <p class="lede">Every category was inferred from the merchant text. Open a confidence
+        score to see the labelled merchant it matched.</p>
     </div>
 </div>
 
-<div class="panel">
-    <div class="panel-head">
-        <div class="toolbar">
-            <input class="control" placeholder="Search merchant…" value="@search"
-                   @onchange="OnSearch" style="min-width:220px" />
-            <label style="display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--muted)">
-                <input type="checkbox" checked="@onlyFlagged" @onchange="OnFlaggedToggle" />
-                Only flagged
-            </label>
-        </div>
-        <span class="eyebrow">@rows.Count shown</span>
-    </div>
+<div class="toolbar" style="margin-bottom:14px">
+    <input class="control" placeholder="Search merchant…" value="@search"
+           @onchange="OnSearch" style="min-width:230px" />
+    <label class="check">
+        <input type="checkbox" checked="@onlyFlagged" @onchange="OnFlaggedToggle" />
+        Only flagged
+    </label>
+    <span class="spacer" style="flex:1"></span>
+    <span class="section-note">@rows.Count shown</span>
+</div>
 
+<div class="card">
     <div class="table-scroll">
         <table class="data">
             <thead>
@@ -41,7 +41,7 @@
                     <th>Category</th>
                     <th>Confidence</th>
                     <th>Flags</th>
-                    <th style="text-align:right">Amount</th>
+                    <th class="amt">Amount</th>
                 </tr>
             </thead>
             <tbody>
@@ -55,7 +55,7 @@
                         <td class="date">@t.Date.ToString("MMM d")</td>
                         <td class="desc">@t.Description</td>
                         <td>
-                            <select class="control" style="padding:4px 8px;font-size:12.5px"
+                            <select class="control control-sm"
                                     value="@(t.Category ?? "")"
                                     @onchange="e => RecategorizeAsync(t.Id, e)">
                                 <option value="">— uncategorized —</option>
@@ -72,26 +72,31 @@
                             }
                             else if (t.Confidence is { } conf)
                             {
-                                <span class="conf" title="@($"Nearest labelled merchant: {t.MatchedOn}")">
-                                    <span class="conf-track @(conf < 0.7f ? "low" : "")">
-                                        <span style="width:@((int)(conf * 100))%"></span>
+                                <span class="conf" tabindex="0"
+                                      aria-label="@($"{conf:P0} confident, matched {t.MatchedOn}")">
+                                    <span class="conf-bars @(conf < 0.7f ? "low" : "")" aria-hidden="true">
+                                        @for (var i = 0; i < ConfidenceSegments; i++)
+                                        {
+                                            <i class="@(i < Lit(conf) ? "on" : "")"></i>
+                                        }
                                     </span>
                                     <span class="conf-val">@conf.ToString("P0")</span>
+                                    <span class="conf-pop">matched @t.MatchedOn</span>
                                 </span>
                             }
                             else
                             {
-                                <span class="conf-val">—</span>
+                                <span class="conf-none">—</span>
                             }
                         </td>
                         <td>
                             @if (t.IsDuplicate)
                             {
-                                <span class="badge-flag">possible duplicate</span>
+                                <span class="flag">possible duplicate</span>
                             }
                             @if (t.IsSubscription)
                             {
-                                <span class="badge-flag badge-sub">recurring</span>
+                                <span class="flag">recurring</span>
                             }
                         </td>
                         <td class="amt @(t.Amount > 0 ? "pos" : "")">@t.Amount.ToString("C2")</td>
@@ -103,6 +108,12 @@
 </div>
 
 @code {
+    const int ConfidenceSegments = 5;
+
+    /// <summary>Segments lit for a score. Always at least one, so a low-confidence match
+    /// still reads as a match rather than as nothing.</summary>
+    static int Lit(float confidence) => Math.Clamp((int)Math.Ceiling(confidence * ConfidenceSegments), 1, ConfidenceSegments);
+
     [SupplyParameterFromQuery(Name = "flagged")] public bool? FlaggedParam { get; set; }
 
     List<TransactionDto> rows = [];

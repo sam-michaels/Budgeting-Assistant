@@ -17,12 +17,12 @@
 <div class="page-head">
     <div>
         <h1>Import a statement</h1>
-        <p>Upload a CSV export. Categories are inferred before anything is saved, so you see what will happen first.</p>
+        <p class="lede">Upload a CSV export. Categories are inferred before anything is
+        saved, so you see what will happen first.</p>
     </div>
 </div>
 
-<div class="panel" style="margin-bottom:18px">
-    <div class="panel-body">
+<div class="card card-pad">
         <div class="toolbar">
             <select class="control" @bind="accountId">
                 @foreach (var a in accounts)
@@ -33,43 +33,44 @@
             <InputFile OnChange="OnFileAsync" accept=".csv,text/csv" class="control" />
             @if (busy)
             {
-                <span style="font-size:13.5px;color:var(--muted)">@status</span>
+                <span class="section-note">@status</span>
             }
         </div>
-        <p style="font-size:13px;color:var(--muted);margin:12px 0 0">
-            Expects a <strong>date</strong>, a <strong>description</strong>, and either an
-            <strong>amount</strong> or a <strong>debit</strong>/<strong>credit</strong> pair.
+        <p class="lede">
+            Expects a date, a description, and either an amount or a debit/credit pair.
             Header names are matched loosely, so most bank exports work unchanged.
         </p>
-    </div>
 </div>
 
 @if (errors.Count > 0)
 {
-    <div class="panel" style="margin-bottom:18px;border-color:var(--flag)">
-        <div class="panel-head"><h2 style="color:var(--flag)">@errors.Count row@(errors.Count == 1 ? "" : "s") skipped</h2></div>
-        <div class="panel-body">
-            <ul style="margin:0;padding-left:18px;font-size:13.5px;color:var(--muted)">
+    <div class="section">
+        <div class="section-head">
+            <h2>@errors.Count row@(errors.Count == 1 ? "" : "s") skipped</h2>
+        </div>
+        <div class="note warn">
+            <ul class="reasons">
                 @foreach (var e in errors.Take(10)) { <li>@e</li> }
             </ul>
-            @if (errors.Count > 10) { <p style="font-size:13px;color:var(--faint);margin:8px 0 0">…and @(errors.Count - 10) more.</p> }
+            @if (errors.Count > 10) { <p class="more">…and @(errors.Count - 10) more.</p> }
         </div>
     </div>
 }
 
 @if (preview.Count > 0)
 {
-    <div class="panel">
-        <div class="panel-head">
+    <div class="section">
+        <div class="section-head">
             <h2>@preview.Count transactions ready</h2>
             <button class="btn primary" @onclick="ConfirmAsync" disabled="@busy">
                 Import @preview.Count transactions
             </button>
         </div>
+        <div class="card">
         <div class="table-scroll">
             <table class="data">
                 <thead>
-                    <tr><th>Date</th><th>Description</th><th>Category</th><th>Confidence</th><th style="text-align:right">Amount</th></tr>
+                    <tr><th>Date</th><th>Description</th><th>Category</th><th>Confidence</th><th class="amt">Amount</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var t in preview.Take(100))
@@ -80,23 +81,29 @@
                             <td>
                                 @if (t.CategoryId is { } id)
                                 {
-                                    var cat = categories.First(c => c.Id == id);
-                                    <span class="chip"><span class="dot" style="background:@cat.Color"></span>@cat.Name</span>
+                                    <span class="chip">@categories.First(c => c.Id == id).Name</span>
                                 }
                                 else
                                 {
-                                    <span class="chip none">uncategorized</span>
+                                    <span class="chip dashed">uncategorized</span>
                                 }
                             </td>
                             <td>
                                 @if (t.CategoryConfidence is { } conf)
                                 {
-                                    <span class="conf" title="@($"Nearest labelled merchant: {t.CategoryMatchedOn}")">
-                                        <span class="conf-track @(conf < 0.7f ? "low" : "")"><span style="width:@((int)(conf * 100))%"></span></span>
+                                    <span class="conf" tabindex="0"
+                                          aria-label="@($"{conf:P0} confident, matched {t.CategoryMatchedOn}")">
+                                        <span class="conf-bars @(conf < 0.7f ? "low" : "")" aria-hidden="true">
+                                            @for (var i = 0; i < ConfidenceSegments; i++)
+                                            {
+                                                <i class="@(i < Lit(conf) ? "on" : "")"></i>
+                                            }
+                                        </span>
                                         <span class="conf-val">@conf.ToString("P0")</span>
+                                        <span class="conf-pop">matched @t.CategoryMatchedOn</span>
                                     </span>
                                 }
-                                else { <span class="conf-val">—</span> }
+                                else { <span class="conf-none">—</span> }
                             </td>
                             <td class="amt @(t.Amount > 0 ? "pos" : "")">@t.Amount.ToString("C2")</td>
                         </tr>
@@ -104,11 +111,12 @@
                 </tbody>
             </table>
         </div>
+        </div>
         @if (preview.Count > 100)
         {
-            <div class="panel-body" style="border-top:1px solid var(--rule);font-size:13px;color:var(--muted)">
+            <p class="section-note" style="margin-top:10px">
                 Showing the first 100. All @preview.Count will be imported.
-            </div>
+            </p>
         }
     </div>
 }
@@ -117,6 +125,11 @@
     // 8MB: a decade of statements is well under this, and it bounds what one upload can
     // pull into server memory.
     const long MaxUploadBytes = 8L * 1024 * 1024;
+
+    // Same meter as the transactions table: an import preview is worth nothing if it does
+    // not show the same confidence the saved rows will carry.
+    const int ConfidenceSegments = 5;
+    static int Lit(float confidence) => Math.Clamp((int)Math.Ceiling(confidence * ConfidenceSegments), 1, ConfidenceSegments);
 
     List<AccountDto> accounts = [];
     List<Category> categories = [];
