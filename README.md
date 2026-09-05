@@ -34,11 +34,22 @@ rather than guessed — a wrong category silently corrupts a budget, a blank one
 
 ## Running it
 
+Everything in containers — Postgres, the migration step, then the app:
+
 ```bash
-docker compose up -d                                   # Postgres 17 + pgvector on :5433
-dotnet ef database update --project src/BudgetAssistant.Web
-dotnet run --project src/BudgetAssistant.Web
+docker compose up -d --build      # app on http://localhost:8080
 ```
+
+Or run the app from the SDK against the containerized database:
+
+```bash
+docker compose up -d db                                # Postgres 17 + pgvector on :5433
+dotnet ef database update --project src/BudgetAssistant.Web
+dotnet run --project src/BudgetAssistant.Web           # app on http://localhost:5298
+```
+
+Port 5433 is Postgres, not the app: pointing a browser at it gets you an empty response
+and `invalid length of startup packet` in the database log.
 
 Open the app and click **Try the demo** — no sign-up. It seeds six months of realistic
 statement data (messy merchant strings, planted duplicates, rotating-reference
