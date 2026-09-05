@@ -9,6 +9,7 @@
 @inject BudgetQueries Queries
 @inject ApplicationDbContext Db
 @inject TransactionCategorizer Categorizer
+@inject TransactionFlagger Flagger
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider Auth
 
@@ -195,12 +196,26 @@
     async Task ConfirmAsync()
     {
         busy = true;
+
+        // Re-checked server-side rather than trusted from the bound <select>: the account
+        // id arrives over the circuit and must still belong to the signed-in user.
+        var account = await Db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
+        if (account is null)
+        {
+            errors = ["That account is no longer available. Reload the page and try again."];
+            preview = [];
+            busy = false;
+            return;
+        }
+
         Db.Transactions.AddRange(preview);
-
-        var account = await Db.Accounts.FirstAsync(a => a.Id == accountId && a.UserId == userId);
         account.Balance += preview.Sum(t => t.Amount);
-
         await Db.SaveChangesAsync();
+
+        // Duplicates and subscriptions are relationships between rows, so they can only be
+        // decided once the imported rows are saved alongside the existing history.
+        await Flagger.FlagAsync(userId);
+
         Nav.NavigateTo("/transactions");
     }
 }

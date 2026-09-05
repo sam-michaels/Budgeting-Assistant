@@ -70,6 +70,7 @@ builder.Services.AddSingleton<IEmbedder, LocalTextEmbedder>();
 builder.Services.AddScoped<VectorSearch>();
 builder.Services.AddScoped<BudgetQueries>();
 builder.Services.AddScoped<TransactionCategorizer>();
+builder.Services.AddScoped<TransactionFlagger>();
 builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddMemoryCache();
 

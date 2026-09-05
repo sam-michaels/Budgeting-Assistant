@@ -13,6 +13,7 @@ public sealed class TransactionsController(
     ApplicationDbContext db,
     BudgetQueries queries,
     TransactionCategorizer categorizer,
+    TransactionFlagger flagger,
     ILogger<TransactionsController> log) : BudgetControllerBase
 {
     /// <summary>Transactions for the signed-in user, newest first.</summary>
@@ -47,6 +48,10 @@ public sealed class TransactionsController(
         db.Transactions.Add(txn);
         account.Balance += txn.Amount;
         await db.SaveChangesAsync(ct);
+
+        // A charge is only a duplicate relative to another charge, so the flags are
+        // recomputed against the user's history once the new row is in it.
+        await flagger.FlagAsync(UserId, ct);
 
         log.LogInformation("Created transaction {Id} for {Amount}, categorized as {Category} at {Confidence:P0}",
             txn.Id, txn.Amount, txn.CategoryId, txn.CategoryConfidence ?? 0);

@@ -19,8 +19,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     /// <summary>Keeps Core entities on plain float[] while the column stays a real
     /// pgvector type. Core therefore has no dependency on Npgsql or Pgvector.</summary>
-    static readonly ValueConverter<float[], Vector> VectorConverter =
-        new(v => new Vector(v), v => v.ToArray());
+    // Declared over float[]? because both mapped properties are nullable. EF short-circuits
+    // null before the converter runs, so the conversion body never sees one.
+    static readonly ValueConverter<float[]?, Vector> VectorConverter =
+        new(v => new Vector(v!), v => v.ToArray());
 
     /// <summary>Without this EF compares float[] by reference, so a recomputed embedding
     /// of equal length would not be detected as a change.</summary>
