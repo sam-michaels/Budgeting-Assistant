@@ -23,6 +23,14 @@
                 @(s.Net >= 0 ? "saved" : "overspent")
                 <span class="sep">·</span>
                 <b>@Money(s.SubscriptionSpend)</b> recurring
+                @if (s.Transfers > 0)
+                {
+                    @* Named rather than silently dropped: money that left checking has to
+                       land somewhere, and a reader who cannot see where assumes a bug. *@
+                    <span class="sep">·</span>
+                    <b>@Money(s.Transfers)</b>
+                    <span>moved between accounts, not counted</span>
+                }
             </p>
         }
     </div>

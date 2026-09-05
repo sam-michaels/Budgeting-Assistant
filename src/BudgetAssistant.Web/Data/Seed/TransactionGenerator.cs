@@ -62,7 +62,10 @@ public static class TransactionGenerator
             txns.Add(new("COMCAST XFINITY", -89.99m, On(12), Checking));
             txns.Add(new("AT&T WIRELESS", -75.00m, On(18), Checking));
             txns.Add(new("GEICO AUTO PMT", -128.44m, On(22), Checking));
-            txns.Add(new("TRANSFER TO SAVINGS", 600.00m, On(16), Savings));
+            // Both legs. With only the credit, $600 a month appears from nowhere and reads
+            // as income; the pair is what makes the transfer exclusion visible in the demo.
+            txns.Add(new("TRANSFER TO SAVINGS", -600.00m, On(16), Checking));
+            txns.Add(new("TRANSFER FROM CHECKING", 600.00m, On(16), Savings));
 
             // --- income, twice monthly ---
             txns.Add(new("ACME CORP PAYROLL", 3120.55m, On(15), Checking));

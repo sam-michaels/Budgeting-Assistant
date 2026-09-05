@@ -19,6 +19,7 @@ public sealed class DatabaseSeeder(
     ApplicationDbContext db,
     IEmbedder embedder,
     TransactionCategorizer categorizer,
+    TransactionFlagger flagger,
     UserManager<ApplicationUser> users,
     ILogger<DatabaseSeeder> log)
 {
@@ -104,35 +105,13 @@ public sealed class DatabaseSeeder(
         db.Transactions.AddRange(txns);
         await db.SaveChangesAsync(ct);
 
-        await FlagDuplicatesAndSubscriptionsAsync(user.Id, ct);
+        await flagger.FlagAsync(user.Id, ct);
         await RecalculateBalancesAsync(ct);
 
         var categorized = txns.Count(t => t.CategoryId is not null);
         log.LogInformation(
             "Seeded demo user with {Total} transactions; {Categorized} auto-categorized ({Pct:P0}), {Unknown} left for review",
             txns.Count, categorized, (double)categorized / txns.Count, txns.Count - categorized);
-    }
-
-    async Task FlagDuplicatesAndSubscriptionsAsync(string userId, CancellationToken ct)
-    {
-        var txns = await db.Transactions
-            .Where(t => t.Account!.UserId == userId && t.Embedding != null)
-            .ToListAsync(ct);
-
-        var vectors = txns.Select(t => new TxnVector(t.Id, t.Amount, t.Date, t.Embedding!)).ToList();
-        var byId = txns.ToDictionary(t => t.Id);
-
-        foreach (var (dupId, originalId) in DuplicateDetector.Find(vectors))
-            byId[dupId].DuplicateOfId = originalId;
-
-        var labelled = txns.Select(t => (new TxnVector(t.Id, t.Amount, t.Date, t.Embedding!), t.NormalizedMerchant)).ToList();
-        var subs = SubscriptionDetector.Find(labelled);
-        foreach (var id in subs.SelectMany(s => s.TransactionIds))
-            byId[id].IsSubscription = true;
-
-        await db.SaveChangesAsync(ct);
-        log.LogInformation("Flagged {Dupes} duplicate charges and {Subs} subscriptions",
-            txns.Count(t => t.DuplicateOfId is not null), subs.Count);
     }
 
     async Task RecalculateBalancesAsync(CancellationToken ct)

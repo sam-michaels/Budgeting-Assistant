@@ -57,7 +57,7 @@ public sealed class BudgetQueries(ApplicationDbContext db)
             .Where(t => t.Date >= from && t.Date < to)
             .Select(t => new SummaryInput(
                 t.Date, t.Amount, t.Category!.Name, t.Category.Color,
-                t.IsSubscription, t.DuplicateOfId != null))
+                t.IsSubscription, t.DuplicateOfId != null, t.IsTransfer))
             .ToListAsync(ct);
 
         return SummaryBuilder.Build(rows, month);

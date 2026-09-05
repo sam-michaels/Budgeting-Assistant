@@ -9,6 +9,11 @@ namespace BudgetAssistant.Web.Data.Seed;
 /// </summary>
 public static class SeedCorpus
 {
+    /// <summary>Assigned by rule rather than by vote, so it has no entry in
+    /// <see cref="Merchants"/>: seeding transfer examples would only give the classifier a
+    /// way to pull real merchants into it. See <see cref="Core.Analysis.TransferDetector"/>.</summary>
+    public const string TransferCategory = "Transfer";
+
     public static readonly (string Name, string Color)[] Categories =
     [
         ("Groceries",     "#4C9F70"), ("Coffee",        "#B07D48"),
@@ -18,7 +23,7 @@ public static class SeedCorpus
         ("Fitness",       "#3FA796"), ("Shopping",      "#E0A458"),
         ("Healthcare",    "#5AA9C9"), ("Insurance",     "#8593A8"),
         ("Travel",        "#3D9BD1"), ("Entertainment", "#C0679B"),
-        ("Income",        "#2E9E5B"),
+        ("Income",        "#2E9E5B"), (TransferCategory, "#6B7A8F"),
     ];
 
     public static readonly (string Category, string[] Examples)[] Merchants =

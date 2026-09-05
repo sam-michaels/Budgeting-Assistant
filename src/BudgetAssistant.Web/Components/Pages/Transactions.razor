@@ -70,6 +70,10 @@
                             {
                                 <span class="chip">set by you</span>
                             }
+                            else if (t.CategorySource == nameof(CategorySource.Rule))
+                            {
+                                <span class="chip">transfer rule</span>
+                            }
                             else if (t.Confidence is { } conf)
                             {
                                 <span class="conf" tabindex="0"

@@ -8,7 +8,7 @@ public readonly record struct CategoryTotal(string Category, string Color, decim
     public decimal? DeltaFraction => PreviousAmount == 0 ? null : (Amount - PreviousAmount) / PreviousAmount;
 }
 
-public readonly record struct SummaryInput(DateOnly Date, decimal Amount, string? Category, string? Color, bool IsSubscription, bool IsDuplicate);
+public readonly record struct SummaryInput(DateOnly Date, decimal Amount, string? Category, string? Color, bool IsSubscription, bool IsDuplicate, bool IsTransfer = false);
 
 public readonly record struct MonthlySummary(
     DateOnly Month,
@@ -17,7 +17,11 @@ public readonly record struct MonthlySummary(
     IReadOnlyList<CategoryTotal> ByCategory,
     int DuplicateCount,
     decimal DuplicateAmount,
-    decimal SubscriptionSpend)
+    decimal SubscriptionSpend,
+    // Money moved between the owner's own accounts this month, counted once: the outgoing
+    // leg only, since the pair would otherwise count twice. Excluded from every other
+    // figure here, and reported so the reader can see where the money went.
+    decimal Transfers)
 {
     public decimal Net => Income - Spending;
 }
@@ -33,8 +37,12 @@ public static class SummaryBuilder
         var start = new DateOnly(month.Year, month.Month, 1);
         var prevStart = start.AddMonths(-1);
 
-        var current = all.Where(t => InMonth(t.Date, start)).ToList();
-        var previous = all.Where(t => InMonth(t.Date, prevStart)).ToList();
+        // Transfers are dropped before anything is totalled: they are the owner's own
+        // money changing accounts, so counting them reports income that was never earned
+        // and spending that never happened. See TransferDetector.
+        var currentAll = all.Where(t => InMonth(t.Date, start)).ToList();
+        var current = currentAll.Where(t => !t.IsTransfer).ToList();
+        var previous = all.Where(t => InMonth(t.Date, prevStart) && !t.IsTransfer).ToList();
 
         // Duplicates are excluded from spend totals: counting a double charge twice
         // overstates the budget, which is the opposite of what flagging it is for.
@@ -63,7 +71,8 @@ public static class SummaryBuilder
             ByCategory: byCategory,
             DuplicateCount: dupes.Count,
             DuplicateAmount: dupes.Sum(t => -t.Amount),
-            SubscriptionSpend: spend.Where(t => t.IsSubscription).Sum(t => -t.Amount));
+            SubscriptionSpend: spend.Where(t => t.IsSubscription).Sum(t => -t.Amount),
+            Transfers: currentAll.Where(t => t.IsTransfer && t.Amount < 0).Sum(t => -t.Amount));
     }
 
     static bool InMonth(DateOnly d, DateOnly monthStart) => d.Year == monthStart.Year && d.Month == monthStart.Month;

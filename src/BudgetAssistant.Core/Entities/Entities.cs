@@ -3,8 +3,9 @@ namespace BudgetAssistant.Core.Entities;
 public enum AccountType { Checking, Savings, Credit }
 
 /// <summary>How a transaction's category was decided. Surfaced in the UI so the
-/// classifier shows its work rather than acting as a black box.</summary>
-public enum CategorySource { Uncategorized, Manual, VectorKnn }
+/// classifier shows its work rather than acting as a black box.
+/// Stored as an int, so new members are appended, never inserted.</summary>
+public enum CategorySource { Uncategorized, Manual, VectorKnn, Rule }
 
 public class Account
 {
@@ -67,4 +68,8 @@ public class Transaction
 
     public int? DuplicateOfId { get; set; }
     public bool IsSubscription { get; set; }
+    /// <summary>Money moved between the owner's own accounts, decided by
+    /// <see cref="Analysis.TransferDetector"/>. Kept as a flag rather than inferred from the
+    /// category name, because the totals depend on it and a user may rename a category.</summary>
+    public bool IsTransfer { get; set; }
 }
