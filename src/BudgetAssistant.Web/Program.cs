@@ -73,22 +73,71 @@ builder.Services.AddScoped<TransactionCategorizer>();
 builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddMemoryCache();
 
-// The LLM summary is optional. With a key, Claude writes it; without one, a deterministic
-// template writes the same facts. Same endpoint, same response shape, no crash either way —
-// so the build and the deployed demo never depend on a third-party key being present.
+// The insight summary is optional at every tier. A small model on Ollama writes it locally,
+// DeepSeek-R1 (also local) is configured for analysis that needs to reason, and a
+// deterministic template writes the same facts when nothing is running. Claude is wired up
+// but never chosen automatically — set Insights:Provider to "claude" for work that outgrows
+// a local model.
+//
+// Same endpoint, same response shape, no crash on any path, so neither the build nor the
+// deployed demo depends on a model or a third-party key being present.
+var insights = builder.Configuration.GetSection("Insights");
+var ollamaUrl = insights["Ollama:BaseUrl"] ?? "http://localhost:11434";
 var anthropicKey = builder.Configuration["Anthropic:ApiKey"]
     ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
-if (!string.IsNullOrWhiteSpace(anthropicKey))
+
+builder.Services.AddHttpClient("ollama", c =>
 {
-    builder.Services.AddSingleton(new AnthropicClient { ApiKey = anthropicKey });
-    builder.Services.AddScoped<IInsightWriter, ClaudeInsightWriter>();
+    c.BaseAddress = new Uri(ollamaUrl);
+    // Generous: a reasoning model on consumer hardware is slow, and the dashboard already
+    // renders its figures before the prose arrives, so a long wait costs nothing but prose.
+    c.Timeout = TimeSpan.FromSeconds(120);
+});
+
+var provider = insights["Provider"] ?? "auto";
+if (provider.Equals("auto", StringComparison.OrdinalIgnoreCase))
+{
+    // ponytail: reachability is probed once, here. Starting Ollama afterwards needs an app
+    // restart; set Insights:Provider="ollama" to bind to it regardless and skip the probe.
+    var ollamaUp = false;
+    try
+    {
+        using var probe = new HttpClient { BaseAddress = new Uri(ollamaUrl), Timeout = TimeSpan.FromSeconds(1) };
+        ollamaUp = (await probe.GetAsync("/api/tags")).IsSuccessStatusCode;
+    }
+    catch { /* Not running. Fall through the ladder. */ }
+
+    provider = ollamaUp ? "ollama"
+        : !string.IsNullOrWhiteSpace(anthropicKey) ? "claude"
+        : "template";
 }
-else
+
+switch (provider.ToLowerInvariant())
 {
-    builder.Services.AddScoped<IInsightWriter, TemplateInsightWriter>();
+    case "ollama":
+        builder.Services.AddScoped<IInsightWriter>(sp => new OllamaInsightWriter(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("ollama"),
+            insights["Ollama:SummaryModel"] ?? "llama3.2:3b",
+            sp.GetRequiredService<ILogger<OllamaInsightWriter>>()));
+        break;
+
+    case "claude" when !string.IsNullOrWhiteSpace(anthropicKey):
+        builder.Services.AddSingleton(new AnthropicClient { ApiKey = anthropicKey });
+        builder.Services.AddScoped<IInsightWriter>(sp => new ClaudeInsightWriter(
+            sp.GetRequiredService<AnthropicClient>(),
+            insights["Claude:Model"] ?? "claude-opus-5",
+            sp.GetRequiredService<ILogger<ClaudeInsightWriter>>()));
+        break;
+
+    default:
+        builder.Services.AddScoped<IInsightWriter, TemplateInsightWriter>();
+        provider = "template";
+        break;
 }
 
 var app = builder.Build();
+
+app.Logger.LogInformation("Insight writer: {Provider}", provider);
 
 // `dotnet BudgetAssistant.Web.dll --migrate` applies migrations and exits, so a release
 // pipeline can run schema changes as their own reviewable step against the same image

@@ -59,7 +59,7 @@ else
     <div class="panel" style="margin-bottom:22px">
         <div class="panel-head">
             <h2>What changed this month</h2>
-            <span class="eyebrow">@(InsightWriter.IsModelBacked ? "written by Claude" : "generated summary")</span>
+            <span class="eyebrow">@Provenance</span>
         </div>
         <div class="panel-body">
             @if (insight is null)
@@ -175,6 +175,12 @@ else
             await LoadAsync();
         }
     }
+
+    /// <summary>Names what wrote the prose. Local models, Claude and the template all
+    /// reach this panel, and the reader should be able to tell which they got.</summary>
+    string Provenance => InsightWriter.Source == IInsightWriter.Template
+        ? "generated summary"
+        : $"written by {InsightWriter.Source}";
 
     static string Money(decimal d) => d.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
     static int Pct(decimal part, decimal whole) => whole == 0 ? 0 : (int)Math.Round(part / whole * 100);

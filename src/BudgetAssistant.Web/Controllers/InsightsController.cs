@@ -7,7 +7,10 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace BudgetAssistant.Web.Controllers;
 
-public record InsightResponse(string Month, string Summary, bool ModelGenerated, InsightPayload Figures);
+/// <param name="Source">What wrote the summary: a model id such as "llama3.2:3b", or
+/// "template" when the deterministic writer did.</param>
+public record InsightResponse(
+    string Month, string Summary, bool ModelGenerated, string Source, InsightPayload Figures);
 
 public sealed class InsightsController(
     BudgetQueries queries,
@@ -20,10 +23,10 @@ public sealed class InsightsController(
     /// </summary>
     /// <param name="month">Month as yyyy-MM. Defaults to the current month.</param>
     /// <remarks>
-    /// The summary is written by Claude when an API key is configured and by a
-    /// deterministic template otherwise; <c>modelGenerated</c> says which. The figures the
-    /// summary describes are returned alongside it, so the prose is always checkable
-    /// against the numbers.
+    /// The summary is written by whichever model is configured — a local one under Ollama
+    /// by default — and by a deterministic template when none is available. <c>source</c>
+    /// names it. The figures the summary describes are returned alongside it, so the prose
+    /// is always checkable against the numbers.
     /// </remarks>
     [HttpGet("monthly-summary")]
     [ProducesResponseType<InsightResponse>(StatusCodes.Status200OK)]
@@ -44,11 +47,11 @@ public sealed class InsightsController(
         var payload = InsightPayload.From(summary);
         var text = await writer.WriteAsync(payload, ct);
 
-        var response = new InsightResponse(payload.Month, text, writer.IsModelBacked, payload);
+        var response = new InsightResponse(
+            payload.Month, text, writer.Source != IInsightWriter.Template, writer.Source, payload);
         cache.Set(key, response, TimeSpan.FromHours(6));
 
-        log.LogInformation("Generated {Kind} insight for {Month}",
-            writer.IsModelBacked ? "model-written" : "template", payload.Month);
+        log.LogInformation("Generated {Source} insight for {Month}", writer.Source, payload.Month);
 
         return response;
     }

@@ -5,7 +5,7 @@ string matching, and flags the double charges and quiet subscriptions that keywo
 miss.
 
 **Stack:** ASP.NET Core 10 · Blazor Server · EF Core (Code-First) · PostgreSQL + pgvector ·
-ONNX Runtime · xUnit
+ONNX Runtime · Ollama · xUnit
 
 ---
 
@@ -24,7 +24,7 @@ space instead:
 | **Auto-categorization** | k-NN against a labelled corpus plus your own past corrections, with a similarity-weighted vote |
 | **Duplicate detection** | Same merchant, same amount to the cent, within three days |
 | **Subscription detection** | Merchant clusters on a monthly cadence — catches rotating reference codes that exact grouping cannot |
-| **Monthly insight** | A three-sentence summary, written by Claude when an API key is present and by a deterministic template otherwise |
+| **Monthly insight** | A three-sentence summary, written by a model running locally on your own machine, or by a deterministic template when none is running |
 
 Every classification shows its work: the category, a confidence meter, and the labelled
 merchant it matched. Below the confidence floor a transaction is left **uncategorized**
@@ -44,13 +44,14 @@ Open the app and click **Try the demo** — no sign-up. It seeds six months of r
 statement data (messy merchant strings, planted duplicates, rotating-reference
 subscriptions) and classifies all of it through the real pipeline on first run.
 
-`dotnet test` runs 55 unit tests in about 40ms; none of them need a database.
+`dotnet test` runs 59 unit tests in under 100ms; none of them need a database.
 Swagger UI is at `/swagger`.
 
-**Optional**, enables the Claude-written summary in place of the template:
+**Optional**, enables a written summary in place of the template. Nothing is sent anywhere
+— the model runs on your machine:
 
 ```bash
-dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-..." --project src/BudgetAssistant.Web
+ollama pull llama3.2:3b     # then leave `ollama serve` running
 ```
 
 ---
@@ -93,17 +94,41 @@ build time from an unmaintained source, which is an unpinned dependency on a thi
 staying online. Vendoring makes builds hermetic. Provenance and checksums are recorded
 alongside it.
 
-### The LLM is optional by construction
+### The LLM is optional by construction, and local by default
 
-The insight endpoint returns the same response shape with or without an API key —
-`modelGenerated` says which wrote it, and the figures the prose describes are returned
-next to it so the text is always checkable against the numbers. A missing or failing key
-costs you the prose, not the page.
+Three tiers, resolved once at startup by `Insights:Provider` (`auto` by default):
 
-What the model receives is an aggregate — category names from a fixed system list and
-rounded totals. No merchant text, no account names, no individual transactions. That
-guarantee is structural rather than a promise: the payload type has no field that could
-hold a statement description, and a test asserts it.
+| Tier | Writes | When |
+|---|---|---|
+| `llama3.2:3b` on Ollama | the monthly summary | the default |
+| `deepseek-r1:8b` on Ollama | analysis that has to reason | configured; no call site yet |
+| a deterministic template | the same facts, deterministically | whenever neither is running |
+
+`auto` takes Ollama if it answers, then Claude if `Anthropic:ApiKey` is set, then the
+template. Claude is wired up but never selected automatically — name it explicitly for work
+that outgrows a local model.
+
+Every tier returns the same response shape. `source` names what wrote the text, and the
+figures the prose describes are returned next to it, so the text is always checkable against
+the numbers. A model that is missing, slow or broken costs you the prose, not the page:
+every writer falls back to the template rather than surfacing an error.
+
+**Both automatic tiers keep the privacy property whole.** Embeddings already run in-process,
+so no transaction description leaves the server; on a local model the month's figures do not
+leave either. Nothing is sent anywhere.
+
+That matters most for the tier where something *is* sent. What Claude receives is an
+aggregate — category names from a fixed system list and rounded totals. No merchant text, no
+account names, no individual transactions. The guarantee is structural rather than a
+promise: the payload type has no field that could hold a statement description, and a test
+asserts it.
+
+Reasoning models are handled as a first-class case rather than assumed away. Recent Ollama
+splits R1's scratchpad into a separate `thinking` field, but older builds leave it inline in
+`<think>` tags, where a leak would land straight on the dashboard — so the writer strips it,
+including the unclosed case where a reply is truncated mid-thought. The token cap is sized
+for it too: R1 spends around 365 tokens reasoning before it writes a word, so a cap tuned to
+an instruct model would truncate it into silence.
 
 ### Three projects, not four
 
@@ -150,7 +175,7 @@ src/BudgetAssistant.Core/      domain + pure analysis (no infrastructure referen
 src/BudgetAssistant.Web/       Blazor Server + REST API + EF Core + Identity
   Services/                    LocalTextEmbedder, VectorSearch, TransactionCategorizer
   Data/Migrations/             committed individually, never auto-applied
-tests/                         55 tests, no database required
+tests/                         59 tests, no database required
 models/bge-micro-v2/           vendored embedding model + provenance
 ```
 
@@ -163,7 +188,7 @@ models/bge-micro-v2/           vendored embedding model + provenance
 | POST | `/api/transactions` | Records and classifies in one step |
 | PUT | `/api/transactions/{id}/category` | A correction becomes training data |
 | GET | `/api/categories` | |
-| GET | `/api/insights/monthly-summary` | `?month=yyyy-MM` |
+| GET | `/api/insights/monthly-summary` | `?month=yyyy-MM`; `source` names what wrote it |
 
 Every endpoint scopes its query to the authenticated principal rather than to a route
 parameter, so no user can read another's data by guessing an id. Responses use DTOs —
