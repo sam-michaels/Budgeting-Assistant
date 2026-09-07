@@ -40,10 +40,11 @@ builder.Services.AddAuthentication(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-// The pgvector type handler is registered on the data source, not through an EF plugin.
-// Pgvector.EntityFrameworkCore has no EF Core 10 build (its latest targets net8.0 against
-// Npgsql EF 9), so binding at the ADO.NET layer avoids coupling to the EF major version.
-// Similarity search is issued as raw SQL by VectorSearch.
+// Two registrations, and both are needed. UseVector() on the data source teaches the
+// ADO.NET layer to read and write the pgvector wire format; UseVector() on the EF options
+// (below) is what gives EF a store mapping for the type, which a value converter alone
+// cannot supply. Pgvector.EntityFrameworkCore 0.3.0 does work against EF Core 10 — an
+// earlier note here claimed otherwise and was wrong.
 var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
 dataSourceBuilder.UseVector();
 var dataSource = dataSourceBuilder.Build();
@@ -73,6 +74,10 @@ builder.Services.AddScoped<TransactionCategorizer>();
 builder.Services.AddScoped<TransactionFlagger>();
 builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddMemoryCache();
+
+// Readiness, not liveness: the app is only useful if it can reach its database, and Fly
+// uses this to decide whether a rolling machine should take traffic.
+builder.Services.AddHealthChecks().AddDbContextCheck<ApplicationDbContext>();
 
 // The insight summary is optional at every tier. A small model on Ollama writes it locally,
 // DeepSeek-R1 (also local) is configured for analysis that needs to reason, and a
@@ -176,6 +181,9 @@ app.UseSwaggerUI();
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 app.UseAntiforgery();
+
+// Anonymous: a health check that needs a login is a health check that always fails.
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.MapStaticAssets();
 app.MapControllers();

@@ -29,6 +29,20 @@ primary_region = "sjc"
   auto_start_machines = true
   min_machines_running = 0
 
+  # The grace period is long on purpose. First boot embeds the labelled corpus and the
+  # demo statement — a few hundred inferences — before it serves anything, and a machine
+  # killed mid-seed just restarts and seeds again. It only happens once: afterwards
+  # seeding is three existence queries against an already-populated database.
+  #
+  # ponytail: if that first boot ever outgrows this, move seeding into the release step
+  # that already runs migrations rather than lengthening the timer again.
+  [[http_service.checks]]
+    grace_period = "90s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/health"
+
 [[vm]]
   # Measured: the container idles at ~128MB with the model loaded, so 256MB would serve
   # a browsing visitor. The headroom is for bulk embedding — a CSV import runs thousands
