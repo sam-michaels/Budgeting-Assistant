@@ -1,5 +1,6 @@
 using BudgetAssistant.Web.Components;
 using BudgetAssistant.Web.Components.Account;
+using System.Globalization;
 using Anthropic;
 using BudgetAssistant.Core.Abstractions;
 using BudgetAssistant.Web.Data;
@@ -11,6 +12,15 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pgvector.Npgsql;
 using Serilog;
+
+// This app reports US dollars. A container image carries no locale, so without this the
+// current culture is the invariant one and every "C" format renders the generic currency
+// sign — ¤4.76 rather than $4.76 — on the deployed app but not on a developer's machine.
+// Set once here rather than passing a culture at each call site, so a new one cannot
+// forget. Parsing stays explicitly invariant where it matters (CsvTransactionReader).
+var money = CultureInfo.GetCultureInfo("en-US");
+CultureInfo.DefaultThreadCurrentCulture = money;
+CultureInfo.DefaultThreadCurrentUICulture = money;
 
 var builder = WebApplication.CreateBuilder(args);
 
