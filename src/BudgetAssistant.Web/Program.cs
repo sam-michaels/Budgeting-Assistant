@@ -57,7 +57,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
         // No email infrastructure in this demo, so requiring confirmation would make
         // registration a dead end.
         options.SignIn.RequireConfirmedAccount = false;
-        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
+        options.Stores.SchemaVersion = ApplicationDbContext.IdentitySchemaVersion;
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
@@ -184,3 +184,10 @@ app.MapAdditionalIdentityEndpoints();
 app.MapDemoLogin();
 
 app.Run();
+
+/// <summary>
+/// Top-level statements compile to an internal `Program`, which
+/// <c>WebApplicationFactory&lt;Program&gt;</c> cannot name. This makes it public without
+/// otherwise changing it. It exists for the integration tests and nothing else.
+/// </summary>
+public partial class Program;

@@ -1,4 +1,5 @@
 using BudgetAssistant.Core.Entities;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -11,6 +12,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     : IdentityDbContext<ApplicationUser>(options)
 {
     public const int EmbeddingDimensions = 384;   // bge-micro-v2
+
+    /// <summary>
+    /// Identity's schema version decides which tables its model contains — v3 adds
+    /// passkeys — so it is part of the EF model and has to match the migration snapshot.
+    /// Declared here rather than inline at the call site because anything that builds this
+    /// context outside the app (the integration tests) has to configure the same value or
+    /// it builds a different model and every migration looks pending.
+    /// </summary>
+    public static readonly Version IdentitySchemaVersion = IdentitySchemaVersions.Version3;
 
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<Category> Categories => Set<Category>();
