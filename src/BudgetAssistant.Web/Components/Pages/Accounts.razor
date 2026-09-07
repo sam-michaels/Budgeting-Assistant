@@ -1,0 +1,57 @@
+@page "/accounts"
+@using System.Security.Claims
+@using BudgetAssistant.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject BudgetQueries Queries
+@inject AuthenticationStateProvider Auth
+
+<PageTitle>Accounts</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Accounts</h1>
+        <p class="lede">Balances are the sum of every recorded transaction.</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-scroll">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Account</th>
+                    <th>Type</th>
+                    <th class="amt">Transactions</th>
+                    <th class="amt">Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (accounts.Count == 0)
+                {
+                    <tr><td colspan="4"><div class="empty">No accounts yet. Import a statement to get started.</div></td></tr>
+                }
+                @foreach (var a in accounts)
+                {
+                    <tr>
+                        <td class="name">@a.Name</td>
+                        <td><span class="chip">@a.Type</span></td>
+                        <td class="amt count">@a.TransactionCount</td>
+                        <td class="amt @(a.Balance >= 0 ? "pos" : "")">@a.Balance.ToString("C2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    List<AccountDto> accounts = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        accounts = await Queries.AccountsAsync(userId);
+    }
+}

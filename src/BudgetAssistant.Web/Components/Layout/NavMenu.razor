@@ -1,0 +1,53 @@
+@implements IDisposable
+@inject NavigationManager NavigationManager
+
+<header class="topbar">
+    <a class="brand" href="">Budget Assistant</a>
+
+    @* A checkbox rather than an @onclick handler: the Identity pages render
+       statically, where an event handler would never fire. No JavaScript either. *@
+    <input type="checkbox" id="nav-toggle" class="nav-toggle-input" />
+    <label class="nav-toggle" for="nav-toggle">Menu</label>
+
+    <nav class="topnav">
+        <NavLink href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+        <NavLink href="transactions">Transactions</NavLink>
+        <NavLink href="accounts">Accounts</NavLink>
+        <NavLink href="import">Import</NavLink>
+
+        <span class="spacer"></span>
+
+        <a href="swagger" target="_blank" rel="noopener">API</a>
+        <AuthorizeView>
+            <Authorized>
+                <NavLink href="Account/Manage">@context.User.Identity?.Name</NavLink>
+                <form action="Account/Logout" method="post">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                    <button type="submit">Sign out</button>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <NavLink href="Account/Login">Sign in</NavLink>
+            </NotAuthorized>
+        </AuthorizeView>
+    </nav>
+</header>
+
+@code {
+    private string? currentUrl;
+
+    protected override void OnInitialized()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose() => NavigationManager.LocationChanged -= OnLocationChanged;
+}

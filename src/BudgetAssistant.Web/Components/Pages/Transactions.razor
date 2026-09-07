@@ -1,0 +1,168 @@
+@page "/transactions"
+@using System.Security.Claims
+@using BudgetAssistant.Core.Entities
+@using BudgetAssistant.Web.Data
+@using BudgetAssistant.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize]
+@inject BudgetQueries Queries
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider Auth
+
+<PageTitle>Transactions</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Transactions</h1>
+        <p class="lede">Every category was inferred from the merchant text. Open a confidence
+        score to see the labelled merchant it matched.</p>
+    </div>
+</div>
+
+<div class="toolbar" style="margin-bottom:14px">
+    <input class="control" placeholder="Search merchant…" value="@search"
+           @onchange="OnSearch" style="min-width:230px" />
+    <label class="check">
+        <input type="checkbox" checked="@onlyFlagged" @onchange="OnFlaggedToggle" />
+        Only flagged
+    </label>
+    <span class="spacer" style="flex:1"></span>
+    <span class="section-note">@rows.Count shown</span>
+</div>
+
+<div class="card">
+    <div class="table-scroll">
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Confidence</th>
+                    <th>Flags</th>
+                    <th class="amt">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Count == 0)
+                {
+                    <tr><td colspan="6"><div class="empty">Nothing matches that filter.</div></td></tr>
+                }
+                @foreach (var t in rows)
+                {
+                    <tr>
+                        <td class="date">@t.Date.ToString("MMM d")</td>
+                        <td class="desc">@t.Description</td>
+                        <td>
+                            <select class="control control-sm"
+                                    value="@(t.Category ?? "")"
+                                    @onchange="e => RecategorizeAsync(t.Id, e)">
+                                <option value="">— uncategorized —</option>
+                                @foreach (var c in categories)
+                                {
+                                    <option value="@c.Name">@c.Name</option>
+                                }
+                            </select>
+                        </td>
+                        <td>
+                            @if (t.CategorySource == nameof(CategorySource.Manual))
+                            {
+                                <span class="chip">set by you</span>
+                            }
+                            else if (t.CategorySource == nameof(CategorySource.Rule))
+                            {
+                                <span class="chip">transfer rule</span>
+                            }
+                            else if (t.Confidence is { } conf)
+                            {
+                                <span class="conf" tabindex="0"
+                                      aria-label="@($"{conf:P0} confident, matched {t.MatchedOn}")">
+                                    <span class="conf-bars @(conf < 0.7f ? "low" : "")" aria-hidden="true">
+                                        @for (var i = 0; i < ConfidenceSegments; i++)
+                                        {
+                                            <i class="@(i < Lit(conf) ? "on" : "")"></i>
+                                        }
+                                    </span>
+                                    <span class="conf-val">@conf.ToString("P0")</span>
+                                    <span class="conf-pop">matched @t.MatchedOn</span>
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="conf-none">—</span>
+                            }
+                        </td>
+                        <td>
+                            @if (t.IsDuplicate)
+                            {
+                                <span class="flag">possible duplicate</span>
+                            }
+                            @if (t.IsSubscription)
+                            {
+                                <span class="flag">recurring</span>
+                            }
+                        </td>
+                        <td class="amt @(t.Amount > 0 ? "pos" : "")">@t.Amount.ToString("C2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    const int ConfidenceSegments = 5;
+
+    /// <summary>Segments lit for a score. Always at least one, so a low-confidence match
+    /// still reads as a match rather than as nothing.</summary>
+    static int Lit(float confidence) => Math.Clamp((int)Math.Ceiling(confidence * ConfidenceSegments), 1, ConfidenceSegments);
+
+    [SupplyParameterFromQuery(Name = "flagged")] public bool? FlaggedParam { get; set; }
+
+    List<TransactionDto> rows = [];
+    List<Category> categories = [];
+    string? search;
+    bool onlyFlagged;
+    string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        categories = await Db.Categories.OrderBy(c => c.Name).ToListAsync();
+        onlyFlagged = FlaggedParam ?? false;
+        await LoadAsync();
+    }
+
+    async Task LoadAsync() =>
+        rows = await Queries.TransactionsAsync(userId, take: 200, search: search, onlyFlagged: onlyFlagged);
+
+    async Task OnSearch(ChangeEventArgs e)
+    {
+        search = e.Value?.ToString();
+        await LoadAsync();
+    }
+
+    async Task OnFlaggedToggle(ChangeEventArgs e)
+    {
+        onlyFlagged = e.Value is true;
+        await LoadAsync();
+    }
+
+    /// <summary>A manual correction is stored as CategorySource.Manual, which makes it a
+    /// labelled neighbour for future classifications — corrections teach the classifier.</summary>
+    async Task RecategorizeAsync(int id, ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        var txn = await Db.Transactions.FirstOrDefaultAsync(t => t.Id == id && t.Account!.UserId == userId);
+        if (txn is null) return;
+
+        txn.CategoryId = categories.FirstOrDefault(c => c.Name == name)?.Id;
+        txn.CategorySource = txn.CategoryId is null ? CategorySource.Uncategorized : CategorySource.Manual;
+        txn.CategoryConfidence = null;
+        txn.CategoryMatchedOn = null;
+        await Db.SaveChangesAsync();
+        await LoadAsync();
+    }
+}

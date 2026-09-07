@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+docs/
+*.md
+!models/bge-micro-v2/README.md
+.DS_Store

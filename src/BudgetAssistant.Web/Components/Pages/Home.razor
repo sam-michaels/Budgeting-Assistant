@@ -1,0 +1,220 @@
+@page "/"
+@using System.Security.Claims
+@using BudgetAssistant.Core.Abstractions
+@using BudgetAssistant.Core.Analysis
+@using BudgetAssistant.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject BudgetQueries Queries
+@inject IInsightWriter InsightWriter
+@inject AuthenticationStateProvider Auth
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>@month.ToString("MMMM yyyy")</h1>
+        @if (summary is { } s)
+        {
+            <p class="statline">
+                <b>@Money(s.Spending)</b> spent
+                <span class="sep">·</span>
+                <b class="@(s.Net >= 0 ? "pos" : "")">@Money(Math.Abs(s.Net))</b>
+                @(s.Net >= 0 ? "saved" : "overspent")
+                <span class="sep">·</span>
+                <b>@Money(s.SubscriptionSpend)</b> recurring
+                @if (s.Transfers > 0)
+                {
+                    @* Named rather than silently dropped: money that left checking has to
+                       land somewhere, and a reader who cannot see where assumes a bug. *@
+                    <span class="sep">·</span>
+                    <b>@Money(s.Transfers)</b>
+                    <span>moved between accounts, not counted</span>
+                }
+            </p>
+        }
+    </div>
+    @if (months.Count > 1)
+    {
+        <select class="control" @onchange="OnMonthChanged" value="@month.ToString("yyyy-MM")" aria-label="Month">
+            @foreach (var m in months)
+            {
+                <option value="@m.ToString("yyyy-MM")">@m.ToString("MMMM yyyy")</option>
+            }
+        </select>
+    }
+</div>
+
+@if (summary is null)
+{
+    <section class="insight"><p class="waiting">Loading your month…</p></section>
+}
+else
+{
+    @* The figures are on the line above. This is the sentence that says what changed —
+       the one thing on the page you could not have worked out yourself — so it leads. *@
+    <section class="insight">
+        @if (insight is null)
+        {
+            <p class="waiting">Reading the month…</p>
+        }
+        else
+        {
+            <p>@insight</p>
+            <p class="provenance">@Provenance</p>
+        }
+    </section>
+
+    <div class="grid-2">
+        <div class="section">
+            <div class="section-head">
+                <h2>Where it went</h2>
+                <span class="section-note">change vs. @month.AddMonths(-1).ToString("MMMM")</span>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    @if (rows.Count == 0)
+                    {
+                        <div class="empty">Nothing categorized this month yet.</div>
+                    }
+                    else
+                    {
+                        var max = rows.Max(r => r.Amount);
+                        @foreach (var r in rows)
+                        {
+                            <div class="cat-row @(r.IsOther ? "other" : "")">
+                                <span class="cat-name">@r.Name</span>
+                                <span class="cat-amt">@Money(r.Amount)</span>
+                                <span class="cat-delta @r.ChangeClass">@r.Change</span>
+                                <span class="bar"><span style="width:@Pct(r.Amount, max)%"></span></span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-head"><h2>Needs attention</h2></div>
+            <div class="card">
+                <div class="card-body">
+                    <div class="att-row">
+                        <div class="att-head">
+                            <span>Possible double charges</span>
+                            <span class="n">@summary.Value.DuplicateCount</span>
+                        </div>
+                        @if (summary.Value.DuplicateCount > 0)
+                        {
+                            <p>
+                                @Money2(summary.Value.DuplicateAmount) charged twice by the same merchant,
+                                for the same amount, within three days.
+                            </p>
+                        }
+                    </div>
+                    <div class="att-row">
+                        <div class="att-head">
+                            <span>Uncategorized</span>
+                            <span class="n">@uncategorized</span>
+                        </div>
+                        <p>
+                            Nothing close enough in the merchant history to classify confidently.
+                            Left blank rather than guessed.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            @if (summary.Value.DuplicateCount + uncategorized > 0)
+            {
+                <p style="margin-top:14px"><a class="btn" href="transactions?flagged=true">Review flagged</a></p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Rows beyond this fold into a single "smaller categories" row. A ranked bar
+    /// list stops being readable long before fourteen rows, and the tail is individually
+    /// too small to act on.</summary>
+    const int TopCategories = 7;
+
+    readonly record struct Row(string Name, decimal Amount, string Change, string ChangeClass, bool IsOther);
+
+    MonthlySummary? summary;
+    List<Row> rows = [];
+    List<DateOnly> months = [];
+    DateOnly month = DateOnly.FromDateTime(DateTime.UtcNow);
+    int uncategorized;
+    string? insight;
+    string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        months = await Queries.AvailableMonthsAsync(userId);
+        if (months.Count > 0) month = months[0];
+        await LoadAsync();
+    }
+
+    async Task LoadAsync()
+    {
+        var s = await Queries.SummaryAsync(userId, month);
+        summary = s;
+        rows = BuildRows(s.ByCategory);
+        uncategorized = (await Queries.TransactionsAsync(userId, take: 500, onlyFlagged: true))
+            .Count(t => t.Category is null);
+
+        // Render the figures first, then fill the prose in — the summary may involve a
+        // model, and the numbers should not wait on it.
+        insight = null;
+        StateHasChanged();
+        insight = await InsightWriter.WriteAsync(InsightPayload.From(s));
+    }
+
+    static List<Row> BuildRows(IReadOnlyList<CategoryTotal> cats)
+    {
+        // Folding one category into "Other" helps nobody, so only fold a real tail.
+        if (cats.Count <= TopCategories + 1)
+            return cats.Select(ToRow).ToList();
+
+        var rows = cats.Take(TopCategories).Select(ToRow).ToList();
+        var tail = cats.Skip(TopCategories).ToList();
+        rows.Add(new Row($"{tail.Count} smaller categories", tail.Sum(c => c.Amount), "", "", true));
+        return rows;
+    }
+
+    static Row ToRow(CategoryTotal c) => new(c.Category, c.Amount, ChangeText(c), ChangeClass(c), false);
+
+    static string ChangeClass(CategoryTotal c) => c.Delta > 0 ? "up" : c.Delta < 0 ? "down" : "";
+
+    static string ChangeText(CategoryTotal c) => c.DeltaFraction switch
+    {
+        null when c.Amount > 0 => "new",
+        null => "",
+        var f when Math.Abs(f.Value) < 0.01m => "—",
+        var f => (f > 0 ? "+" : "−") + Math.Abs(f.Value).ToString("P0"),
+    };
+
+    /// <summary>Names what wrote the prose. Local models, Claude and the template all reach
+    /// this panel, and the reader should be able to tell which they got.</summary>
+    string Provenance => InsightWriter.Source == IInsightWriter.Template
+        ? "written from a template — no model is running"
+        : $"written by {InsightWriter.Source}";
+
+    async Task OnMonthChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse($"{e.Value}-01", out var picked))
+        {
+            month = picked;
+            summary = null;
+            await LoadAsync();
+        }
+    }
+
+    static readonly System.Globalization.CultureInfo Usd =
+        System.Globalization.CultureInfo.GetCultureInfo("en-US");
+
+    static string Money(decimal d) => d.ToString("C0", Usd);
+    static string Money2(decimal d) => d.ToString("C2", Usd);
+    static int Pct(decimal part, decimal whole) => whole == 0 ? 0 : (int)Math.Round(part / whole * 100);
+}

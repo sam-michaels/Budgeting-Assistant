@@ -1,0 +1,358 @@
+/* ═══ tokens ══════════════════════════════════════════════════════════════════
+   Light is defined on :root; dark redefines these values only, so no rule below
+   this block ever names a literal colour. */
+:root {
+    --ground:          #F5F5F7;
+    --card:            #FFFFFF;
+    --sunk:            #EFEFF2;
+
+    --ink:             #1D1D1F;
+    --ink-2:           #6E6E73;
+    --ink-3:           #A1A1A6;
+
+    --hairline:        rgba(0, 0, 0, .09);
+    --hairline-strong: rgba(0, 0, 0, .16);
+
+    --link:            #0071E3;
+    /* The one data colour. Magnitude is carried by bar length; a second encoding
+       on top of it would be decoration. Validated >= 3:1 on --card. */
+    --data:            #2A75BA;
+    --track:           #E9E9EB;
+
+    --positive:        #147D3F;
+    --alert:           #9A5B00;
+    --alert-bg:        #FDF3E3;
+    --danger:          #B3261E;
+
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+    --r-card: 12px;
+    --r-ctl:  8px;
+    --shadow: 0 0 0 .5px rgba(0, 0, 0, .04), 0 1px 3px rgba(0, 0, 0, .05);
+    --measure: 66ch;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ground:          #000000;
+        --card:            #1C1C1E;
+        --sunk:            #2C2C2E;
+
+        --ink:             #F5F5F7;
+        --ink-2:           #98989D;
+        --ink-3:           #636366;
+
+        --hairline:        rgba(255, 255, 255, .13);
+        --hairline-strong: rgba(255, 255, 255, .24);
+
+        --link:            #0A84FF;
+        --data:            #4D97DE;
+        --track:           #3A3A3C;
+
+        --positive:        #3ECF6E;
+        --alert:           #E9A23B;
+        --alert-bg:        #2E2313;
+        --danger:          #FF6961;
+
+        --shadow: none;
+    }
+}
+
+/* ═══ base ════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    background: var(--ground);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { color: var(--ink); margin: 0; font-weight: 600; letter-spacing: -.021em; }
+h1 { font-size: 28px; }
+h2 { font-size: 17px; letter-spacing: -.012em; }
+p  { margin: 0; }
+
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* One focus treatment everywhere, and it is always visible. */
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 4px; }
+
+.num, .amt, .kpi-value, .cat-amt, .conf-val { font-variant-numeric: tabular-nums; }
+
+/* ═══ shell ═══════════════════════════════════════════════════════════════════ */
+.topbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 24px;
+    height: 52px; padding: 0 22px;
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--hairline);
+}
+.brand { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.brand:hover { text-decoration: none; }
+
+.topnav { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; }
+.topnav a, .topnav button {
+    font: inherit; font-size: 14px; color: var(--ink-2);
+    padding: 5px 10px; border-radius: 7px; border: 0; background: none; cursor: pointer;
+}
+.topnav a:hover, .topnav button:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
+.topnav a.active { color: var(--ink); font-weight: 550; background: var(--sunk); }
+.topnav .spacer { flex: 1; }
+
+.content { max-width: 1100px; margin: 0 auto; padding: 32px 22px 72px; }
+
+/* Mobile: the nav collapses behind a disclosure rather than wrapping into two rows.
+   Driven by a checkbox so it works on the statically-rendered Identity pages. The
+   input stays in the layer order but off-screen, so it is still keyboard-reachable. */
+.nav-toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
+.nav-toggle { display: none; }
+.nav-toggle-input:focus-visible + .nav-toggle { outline: 2px solid var(--link); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+    .topbar { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 10px; }
+    .nav-toggle {
+        display: inline-flex; margin-left: auto; font-size: 14px; color: var(--ink-2);
+        cursor: pointer; padding: 4px 9px; border-radius: 7px; border: 1px solid var(--hairline-strong);
+    }
+    .topnav { display: none; flex-basis: 100%; flex-direction: column; align-items: stretch; gap: 1px; }
+    .nav-toggle-input:checked ~ .topnav { display: flex; }
+    .topnav .spacer { display: none; }
+    .topnav form { display: contents; }
+    .topnav a, .topnav button { text-align: left; padding: 9px 10px; }
+    .content { padding: 22px 16px 60px; }
+}
+
+/* ═══ page head ═══════════════════════════════════════════════════════════════ */
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.page-head + * { margin-top: 26px; }
+.lede { margin-top: 6px; color: var(--ink-2); font-size: 14px; max-width: var(--measure); }
+
+/* The month's figures, demoted to one line so the written summary can lead. */
+.statline { margin-top: 8px; font-size: 15px; color: var(--ink-2); }
+.statline b { color: var(--ink); font-weight: 590; font-variant-numeric: tabular-nums; }
+.statline .sep { color: var(--ink-3); margin: 0 8px; }
+.statline .pos { color: var(--positive); }
+
+/* ═══ the insight — the hero ══════════════════════════════════════════════════
+   The figures are on the stat line above; this is the sentence that says what
+   changed, which is the only thing on the page a person could not work out for
+   themselves. It gets reading size and the top of the page. */
+.insight { margin: 26px 0 34px; }
+.insight p {
+    font-size: 21px; line-height: 1.45; letter-spacing: -.014em;
+    color: var(--ink); max-width: var(--measure); text-wrap: pretty;
+}
+.insight .waiting { color: var(--ink-3); }
+.provenance { margin-top: 12px; font-size: 12px; color: var(--ink-3); }
+
+/* The one piece of non-interactive motion on the site. The prose genuinely
+   arrives after the figures render, so the fade marks a real change of state. */
+.insight p { animation: settle .4s cubic-bezier(.22, .61, .36, 1) both; }
+@keyframes settle { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+    .insight p { animation: none; }
+    * { transition: none !important; }
+}
+
+/* ═══ grouped surfaces ════════════════════════════════════════════════════════
+   Rows separated by hairlines inset from the left edge, no outer border. */
+.card {
+    background: var(--card); border-radius: var(--r-card);
+    box-shadow: var(--shadow); overflow: hidden;
+}
+.card + .card, .section + .section { margin-top: 22px; }
+.section-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; margin-bottom: 10px;
+}
+.section-note { font-size: 13px; color: var(--ink-3); }
+.card-body { padding: 4px 16px; }
+.card-pad { padding: 16px; }
+
+.grid-2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 22px; align-items: start; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.empty { padding: 40px 16px; text-align: center; color: var(--ink-2); font-size: 14px; }
+.empty a { display: inline-block; margin-top: 4px; }
+
+/* ═══ spending rows ═══════════════════════════════════════════════════════════ */
+.cat-row {
+    display: grid; grid-template-columns: 1fr auto auto; align-items: center;
+    gap: 4px 14px; padding: 13px 0; border-bottom: 1px solid var(--hairline);
+}
+.cat-row:last-child { border-bottom: none; }
+.cat-name { font-size: 15px; color: var(--ink); }
+.cat-amt  { font-size: 15px; font-weight: 550; color: var(--ink); }
+.cat-delta { font-size: 13px; color: var(--ink-3); min-width: 4.2em; text-align: right; }
+.cat-delta.up   { color: var(--danger); }
+.cat-delta.down { color: var(--positive); }
+.bar {
+    grid-column: 1 / -1; height: 6px; background: var(--track);
+    border-radius: 3px; overflow: hidden; margin-top: 2px;
+}
+.bar > span { display: block; height: 100%; background: var(--data); border-radius: 3px; }
+.cat-row.other .cat-name { color: var(--ink-2); }
+.cat-row.other .bar > span { background: var(--ink-3); }
+
+/* ═══ attention list ══════════════════════════════════════════════════════════ */
+.att-row { padding: 14px 0; border-bottom: 1px solid var(--hairline); }
+.att-row:last-child { border-bottom: none; }
+.att-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.att-head .n { font-size: 20px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.att-row p { margin-top: 5px; font-size: 13px; color: var(--ink-2); max-width: 46ch; }
+
+/* ═══ table ═══════════════════════════════════════════════════════════════════ */
+.table-scroll { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.data th {
+    text-align: left; font-size: 13px; font-weight: 500; color: var(--ink-2);
+    padding: 11px 14px; border-bottom: 1px solid var(--hairline); white-space: nowrap;
+}
+table.data td { padding: 11px 14px; border-bottom: 1px solid var(--hairline); vertical-align: middle; }
+table.data tr:last-child td { border-bottom: none; }
+table.data tbody tr:hover { background: var(--sunk); }
+td.amt  { text-align: right; font-weight: 550; white-space: nowrap; }
+th.amt  { text-align: right; }
+td.amt.pos { color: var(--positive); }
+td.date { color: var(--ink-2); white-space: nowrap; }
+/* Monospace earns its place here and nowhere else: this is the machine-printed
+   string off the statement, shown verbatim so it can be compared by eye. */
+td.desc { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+td.name { font-weight: 550; }
+td.count { font-weight: 400; color: var(--ink-2); }
+
+/* ═══ chips & flags ═══════════════════════════════════════════════════════════ */
+.chip {
+    display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 20px;
+    font-size: 12px; font-weight: 500; background: var(--sunk); color: var(--ink-2);
+    white-space: nowrap;
+}
+.flag {
+    display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px;
+    font-size: 12px; font-weight: 550; background: var(--alert-bg); color: var(--alert);
+    white-space: nowrap;
+}
+.flag + .flag { margin-left: 5px; }
+.chip.dashed { background: none; border: 1px dashed var(--hairline-strong); color: var(--ink-3); }
+
+/* ═══ confidence ══════════════════════════════════════════════════════════════
+   The signature element. Every classification shows what it matched, so this has
+   to be reachable by keyboard and touch, not a title= tooltip that only a mouse
+   can find. */
+.conf { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: default; }
+.conf-bars { display: inline-flex; gap: 2px; }
+.conf-bars i { width: 5px; height: 13px; border-radius: 1.5px; background: var(--track); }
+.conf-bars i.on { background: var(--data); }
+.conf-bars.low i.on { background: var(--alert); }
+.conf-val { font-size: 13px; color: var(--ink-2); }
+.conf-pop {
+    position: absolute; left: 0; top: calc(100% + 7px); z-index: 20;
+    display: none; width: max-content; max-width: 280px;
+    padding: 7px 10px; border-radius: var(--r-ctl);
+    background: var(--ink); color: var(--card);
+    font-family: var(--mono); font-size: 12px; line-height: 1.4;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+}
+.conf:hover .conf-pop, .conf:focus-visible .conf-pop, .conf:focus-within .conf-pop { display: block; }
+.conf-none { font-size: 13px; color: var(--ink-3); }
+
+/* ═══ controls ════════════════════════════════════════════════════════════════ */
+.control {
+    font: inherit; font-size: 14px; padding: 7px 11px;
+    border-radius: var(--r-ctl); border: 1px solid var(--hairline-strong);
+    background: var(--card); color: var(--ink);
+}
+select.control { padding-right: 26px; }
+.control-sm { font-size: 13px; padding: 4px 8px; }
+
+.btn {
+    font: inherit; font-size: 14px; font-weight: 500; padding: 7px 15px;
+    border-radius: var(--r-ctl); border: 1px solid var(--hairline-strong);
+    background: var(--card); color: var(--ink); cursor: pointer;
+    transition: background .15s ease;
+}
+.btn:hover { background: var(--sunk); text-decoration: none; }
+.btn.primary { background: var(--link); border-color: var(--link); color: #fff; }
+.btn.primary:hover { filter: brightness(1.07); background: var(--link); }
+.btn.wide { width: 100%; }
+.btn-link {
+    font: inherit; font-size: 14px; background: none; border: 0;
+    color: var(--link); cursor: pointer; padding: 0;
+}
+.btn-link:hover { text-decoration: underline; }
+
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.check { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: var(--ink-2); }
+
+/* ═══ auth pages ══════════════════════════════════════════════════════════════
+   The scaffolded Identity pages share the app's surfaces so signing in does not
+   look like a different product. */
+.auth { max-width: 380px; margin: 8vh auto 0; padding: 0 20px 60px; }
+.auth-wide { max-width: 720px; }
+.auth h1 { font-size: 24px; text-align: center; }
+.auth .lede { text-align: center; margin: 8px auto 26px; }
+.auth-card { background: var(--card); border-radius: var(--r-card); box-shadow: var(--shadow); padding: 22px; }
+.auth-card + .auth-card { margin-top: 16px; }
+/* The scaffolded Identity markup puts the label AFTER its input (a Bootstrap
+   floating-label hangover). Ordering with flex fixes the visual order in one rule
+   rather than reordering the DOM in two dozen files; `for=` already ties them. */
+.field { display: flex; flex-direction: column; margin-bottom: 14px; }
+.field > label { order: -1; font-size: 13px; color: var(--ink-2); margin-bottom: 5px; }
+.field .control { width: 100%; }
+.field.check { flex-direction: row; }
+.field.check > label { order: 0; display: inline-flex; align-items: center; gap: 7px; font-size: 14px; margin: 0; }
+.auth-alt { margin-top: 18px; font-size: 14px; color: var(--ink-2); text-align: center; }
+.auth-alt a { display: inline-block; }
+.auth-alt .sep { color: var(--ink-3); margin: 0 7px; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.auth-sep { display: flex; align-items: center; gap: 12px; margin: 22px 0; color: var(--ink-3); font-size: 13px; }
+.auth-sep::before, .auth-sep::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+
+/* Two-column shell for the account-management pages. */
+.manage { display: grid; grid-template-columns: 200px 1fr; gap: 28px; align-items: start; }
+@media (max-width: 720px) { .manage { grid-template-columns: 1fr; } }
+.manage nav { display: flex; flex-direction: column; gap: 1px; }
+.manage nav a { font-size: 14px; color: var(--ink-2); padding: 7px 10px; border-radius: 7px; }
+.manage nav a:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
+.manage nav a.active { background: var(--sunk); color: var(--ink); font-weight: 550; }
+
+/* ═══ messages ════════════════════════════════════════════════════════════════ */
+.note {
+    padding: 11px 14px; border-radius: var(--r-ctl); font-size: 14px;
+    background: var(--sunk); color: var(--ink);
+}
+.note.warn { background: var(--alert-bg); color: var(--alert); }
+.note.bad  { background: var(--alert-bg); color: var(--danger); }
+.note .reasons { margin: 0; padding-left: 18px; font-size: 13px; }
+.note .more { margin-top: 6px; font-size: 13px; opacity: .8; }
+.validation-message, .validation-errors { color: var(--danger); font-size: 13px; }
+
+/* ═══ framework ═══════════════════════════════════════════════════════════════ */
+#blazor-error-ui {
+    display: none; position: fixed; bottom: 0; left: 0; width: 100%; z-index: 1000;
+    padding: 11px 16px; font-size: 14px; background: var(--alert-bg); color: var(--alert);
+}
+#blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: 16px; top: 11px; }
+.blazor-error-boundary { background: var(--danger); color: #fff; padding: 12px; border-radius: var(--r-ctl); }
+
+/* ═══ leftovers from the Identity scaffold ════════════════════════════════════ */
+hr { border: 0; border-top: 1px solid var(--hairline); margin: 20px 0; }
+.manage h2, .manage h3 { font-size: 17px; margin-bottom: 12px; }
+.manage h1 { font-size: 20px; }
+.code {
+    font-family: var(--mono); font-size: 13px; background: var(--sunk);
+    padding: 3px 7px; border-radius: 5px; display: inline-block; margin: 2px;
+}
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger:hover { filter: brightness(1.07); background: var(--danger); }
+.note ul { margin: 6px 0 0; padding-left: 18px; }
+.danger-text { color: var(--danger); }

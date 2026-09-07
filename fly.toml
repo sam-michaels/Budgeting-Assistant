@@ -1,0 +1,52 @@
+# Fly.io deployment. Postgres lives on Neon or Supabase rather than Fly Postgres,
+# because both ship the pgvector extension enabled and Fly's managed Postgres does not
+# reliably. Set the connection string once:
+#
+#   fly secrets set ConnectionStrings__DefaultConnection="Host=...;Database=...;Username=...;Password=...;SSL Mode=Require"
+#
+# Optional — enables the Claude-written summary instead of the deterministic one:
+#   fly secrets set Anthropic__ApiKey="sk-ant-..."
+
+app = "budget-assistant"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Schema changes run here, as their own step, before any new instance serves traffic.
+# Deliberately not applied on startup.
+[deploy]
+  release_command = "dotnet BudgetAssistant.Web.dll --migrate"
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED = "true"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # The grace period is long on purpose. First boot embeds the labelled corpus and the
+  # demo statement — a few hundred inferences — before it serves anything, and a machine
+  # killed mid-seed just restarts and seeds again. It only happens once: afterwards
+  # seeding is three existence queries against an already-populated database.
+  #
+  # ponytail: if that first boot ever outgrows this, move seeding into the release step
+  # that already runs migrations rather than lengthening the timer again.
+  [[http_service.checks]]
+    grace_period = "90s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  # Measured: the container idles at ~128MB with the model loaded, so 256MB would serve
+  # a browsing visitor. The headroom is for bulk embedding — a CSV import runs thousands
+  # of inferences back to back.
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

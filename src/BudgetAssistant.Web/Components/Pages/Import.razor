@@ -1,0 +1,221 @@
+@page "/import"
+@using System.Security.Claims
+@using BudgetAssistant.Core.Entities
+@using BudgetAssistant.Web.Data
+@using BudgetAssistant.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize]
+@inject BudgetQueries Queries
+@inject ApplicationDbContext Db
+@inject TransactionCategorizer Categorizer
+@inject TransactionFlagger Flagger
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider Auth
+
+<PageTitle>Import transactions</PageTitle>
+
+<div class="page-head">
+    <div>
+        <h1>Import a statement</h1>
+        <p class="lede">Upload a CSV export. Categories are inferred before anything is
+        saved, so you see what will happen first.</p>
+    </div>
+</div>
+
+<div class="card card-pad">
+        <div class="toolbar">
+            <select class="control" @bind="accountId">
+                @foreach (var a in accounts)
+                {
+                    <option value="@a.Id">@a.Name</option>
+                }
+            </select>
+            <InputFile OnChange="OnFileAsync" accept=".csv,text/csv" class="control" />
+            @if (busy)
+            {
+                <span class="section-note">@status</span>
+            }
+        </div>
+        <p class="lede">
+            Expects a date, a description, and either an amount or a debit/credit pair.
+            Header names are matched loosely, so most bank exports work unchanged.
+        </p>
+</div>
+
+@if (errors.Count > 0)
+{
+    <div class="section">
+        <div class="section-head">
+            <h2>@errors.Count row@(errors.Count == 1 ? "" : "s") skipped</h2>
+        </div>
+        <div class="note warn">
+            <ul class="reasons">
+                @foreach (var e in errors.Take(10)) { <li>@e</li> }
+            </ul>
+            @if (errors.Count > 10) { <p class="more">…and @(errors.Count - 10) more.</p> }
+        </div>
+    </div>
+}
+
+@if (preview.Count > 0)
+{
+    <div class="section">
+        <div class="section-head">
+            <h2>@preview.Count transactions ready</h2>
+            <button class="btn primary" @onclick="ConfirmAsync" disabled="@busy">
+                Import @preview.Count transactions
+            </button>
+        </div>
+        <div class="card">
+        <div class="table-scroll">
+            <table class="data">
+                <thead>
+                    <tr><th>Date</th><th>Description</th><th>Category</th><th>Confidence</th><th class="amt">Amount</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in preview.Take(100))
+                    {
+                        <tr>
+                            <td class="date">@t.Date.ToString("MMM d")</td>
+                            <td class="desc">@t.RawDescription</td>
+                            <td>
+                                @if (t.CategoryId is { } id)
+                                {
+                                    <span class="chip">@categories.First(c => c.Id == id).Name</span>
+                                }
+                                else
+                                {
+                                    <span class="chip dashed">uncategorized</span>
+                                }
+                            </td>
+                            <td>
+                                @if (t.CategoryConfidence is { } conf)
+                                {
+                                    <span class="conf" tabindex="0"
+                                          aria-label="@($"{conf:P0} confident, matched {t.CategoryMatchedOn}")">
+                                        <span class="conf-bars @(conf < 0.7f ? "low" : "")" aria-hidden="true">
+                                            @for (var i = 0; i < ConfidenceSegments; i++)
+                                            {
+                                                <i class="@(i < Lit(conf) ? "on" : "")"></i>
+                                            }
+                                        </span>
+                                        <span class="conf-val">@conf.ToString("P0")</span>
+                                        <span class="conf-pop">matched @t.CategoryMatchedOn</span>
+                                    </span>
+                                }
+                                else { <span class="conf-none">—</span> }
+                            </td>
+                            <td class="amt @(t.Amount > 0 ? "pos" : "")">@t.Amount.ToString("C2")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        </div>
+        @if (preview.Count > 100)
+        {
+            <p class="section-note" style="margin-top:10px">
+                Showing the first 100. All @preview.Count will be imported.
+            </p>
+        }
+    </div>
+}
+
+@code {
+    // 8MB: a decade of statements is well under this, and it bounds what one upload can
+    // pull into server memory.
+    const long MaxUploadBytes = 8L * 1024 * 1024;
+
+    // Same meter as the transactions table: an import preview is worth nothing if it does
+    // not show the same confidence the saved rows will carry.
+    const int ConfidenceSegments = 5;
+    static int Lit(float confidence) => Math.Clamp((int)Math.Ceiling(confidence * ConfidenceSegments), 1, ConfidenceSegments);
+
+    List<AccountDto> accounts = [];
+    List<Category> categories = [];
+    List<Transaction> preview = [];
+    List<string> errors = [];
+    int accountId;
+    bool busy;
+    string status = "";
+    string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+        accounts = await Queries.AccountsAsync(userId);
+        categories = await Db.Categories.ToListAsync();
+        accountId = accounts.FirstOrDefault()?.Id ?? 0;
+    }
+
+    async Task OnFileAsync(InputFileChangeEventArgs e)
+    {
+        preview = [];
+        errors = [];
+        busy = true;
+        status = "Reading…";
+
+        try
+        {
+            await using var stream = e.File.OpenReadStream(MaxUploadBytes);
+            using var reader = new StreamReader(stream);
+            var parsed = CsvTransactionReader.Read(reader);
+            errors = parsed.Errors;
+
+            if (parsed.Rows.Count == 0) return;
+
+            status = $"Classifying {parsed.Rows.Count} transactions…";
+            StateHasChanged();
+
+            foreach (var row in parsed.Rows)
+            {
+                var txn = new Transaction
+                {
+                    AccountId = accountId,
+                    Date = row.Date,
+                    RawDescription = row.Description,
+                    Amount = row.Amount,
+                };
+                await Categorizer.ClassifyAsync(txn, userId);
+                preview.Add(txn);
+            }
+        }
+        catch (IOException)
+        {
+            errors = [$"That file is larger than {MaxUploadBytes / 1024 / 1024}MB. Split it and import each part."];
+        }
+        finally
+        {
+            busy = false;
+            status = "";
+        }
+    }
+
+    async Task ConfirmAsync()
+    {
+        busy = true;
+
+        // Re-checked server-side rather than trusted from the bound <select>: the account
+        // id arrives over the circuit and must still belong to the signed-in user.
+        var account = await Db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
+        if (account is null)
+        {
+            errors = ["That account is no longer available. Reload the page and try again."];
+            preview = [];
+            busy = false;
+            return;
+        }
+
+        Db.Transactions.AddRange(preview);
+        account.Balance += preview.Sum(t => t.Amount);
+        await Db.SaveChangesAsync();
+
+        // Duplicates and subscriptions are relationships between rows, so they can only be
+        // decided once the imported rows are saved alongside the existing history.
+        await Flagger.FlagAsync(userId);
+
+        Nav.NavigateTo("/transactions");
+    }
+}

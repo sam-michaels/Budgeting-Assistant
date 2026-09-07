@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      # Warnings are errors here but not locally: a warning that only fails the build on
+      # someone's machine is a warning nobody fixes.
+      - name: Build
+        run: dotnet build --no-restore --configuration Release -warnaserror
+
+      # Core.Tests are pure and need nothing. Web.Tests start a pgvector container through
+      # Testcontainers — the runner's Docker daemon serves it with no extra setup.
+      - name: Test
+        run: dotnet test --no-build --configuration Release --verbosity normal
