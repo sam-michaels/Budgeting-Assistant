@@ -1,5 +1,7 @@
 # Budget Assistant
 
+[![CI](https://github.com/sam-michaels/Budgeting-Assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/sam-michaels/Budgeting-Assistant/actions/workflows/ci.yml)
+
 A personal-finance web app that categorizes bank transactions by meaning rather than by
 string matching, and flags the double charges and quiet subscriptions that keyword rules
 miss.
@@ -55,8 +57,11 @@ Open the app and click **Try the demo** — no sign-up. It seeds six months of r
 statement data (messy merchant strings, planted duplicates, rotating-reference
 subscriptions) and classifies all of it through the real pipeline on first run.
 
-`dotnet test` runs 59 unit tests in under 100ms; none of them need a database.
-Swagger UI is at `/swagger`.
+`dotnet test` runs 77 tests in under ten seconds. The 72 unit tests need no database and
+finish in 50ms; the 5 API tests start a throwaway Postgres in a container and check that
+one user cannot read another's data through the API.
+
+Swagger UI is at `/swagger`; `/health` reports whether the app can reach its database.
 
 **Optional**, enables a written summary in place of the template. Nothing is sent anywhere
 — the model runs on your machine:
@@ -145,7 +150,7 @@ an instruct model would truncate it into silence.
 
 `Core` holds the domain and all the analysis as pure functions, with no reference to EF
 Core, ASP.NET, ONNX or Npgsql — which is the property that makes the logic testable, and
-why the whole suite runs in 40ms with no database and no mocks. `Web` is the single
+why the unit suite runs in 50ms with no database and no mocks. `Web` is the single
 deployable host. A separate `Infrastructure` project pays for itself with multiple hosts
 or a genuine provider swap, and this has neither.
 
@@ -186,7 +191,8 @@ src/BudgetAssistant.Core/      domain + pure analysis (no infrastructure referen
 src/BudgetAssistant.Web/       Blazor Server + REST API + EF Core + Identity
   Services/                    LocalTextEmbedder, VectorSearch, TransactionCategorizer
   Data/Migrations/             committed individually, never auto-applied
-tests/                         59 tests, no database required
+tests/BudgetAssistant.Core.Tests/   72 pure tests, no database
+tests/BudgetAssistant.Web.Tests/    5 API tests against a real Postgres
 models/bge-micro-v2/           vendored embedding model + provenance
 ```
 
