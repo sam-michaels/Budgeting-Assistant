@@ -6,6 +6,8 @@ A personal-finance web app that categorizes bank transactions by meaning rather 
 string matching, and flags the double charges and quiet subscriptions that keyword rules
 miss.
 
+![Transactions, each category inferred from the merchant text, with its confidence score](docs/transactions.png)
+
 **Stack:** ASP.NET Core 10 · Blazor Server · EF Core (Code-First) · PostgreSQL + pgvector ·
 ONNX Runtime · Ollama · xUnit
 
@@ -27,6 +29,8 @@ space instead:
 | **Duplicate detection** | Same merchant, same amount to the cent, within three days |
 | **Subscription detection** | Merchant clusters on a monthly cadence — catches rotating reference codes that exact grouping cannot |
 | **Monthly insight** | A three-sentence summary, written by a model running locally on your own machine, or by a deterministic template when none is running |
+
+![The monthly dashboard: figures first, then a summary that names what wrote it](docs/dashboard.png)
 
 Every classification shows its work: the category, a confidence meter, and the labelled
 merchant it matched. Below the confidence floor a transaction is left **uncategorized**
